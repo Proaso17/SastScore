@@ -28,6 +28,8 @@ dependencies = [
     "pydantic>=2.6",
     "pyyaml>=6.0",
     "pathspec>=0.12",
+    "tree-sitter>=0.23",
+    "tree-sitter-language-pack>=0.9",
 ]
 
 [project.optional-dependencies]
@@ -60,6 +62,8 @@ packages = ["src/sastcore"]
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
+# Los fixtures son código deliberadamente inseguro; no se lintean ni tipan.
+extend-exclude = ["tests/rules/fixtures"]
 
 [tool.ruff.lint]
 select = [
@@ -78,10 +82,15 @@ select = [
 python_version = "3.11"
 strict = true
 files = ["src", "tests"]
+exclude = ['tests/rules/fixtures/']
 warn_unreachable = true
 warn_redundant_casts = true
 show_error_codes = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["tree_sitter_language_pack.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 minversion = "8.0"
