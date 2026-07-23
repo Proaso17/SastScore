@@ -1,8 +1,7 @@
 """Interfaz de línea de comandos de sastcore.
 
-Fase 0: la superficie de comandos y flags queda congelada aquí para que los
-scripts de CI puedan depender de ella, pero el motor de análisis todavía no
-existe. Los comandos son deliberadamente stubs.
+La superficie de comandos y flags está congelada desde la Fase 0. En la Fase 1,
+``scan`` ejecuta discovery + la pasada de secretos y despacha al reporter elegido.
 """
 
 from enum import StrEnum
@@ -14,7 +13,12 @@ from rich.console import Console
 
 from sastcore import __version__
 from sastcore._logging import configure_logging
+from sastcore.engine.scheduler import Scheduler
 from sastcore.exit_codes import ExitCode
+from sastcore.findings.dedup import deduplicate
+from sastcore.findings.model import Finding, Severity, severity_rank
+from sastcore.reporters.console import ConsoleReporter
+from sastcore.reporters.json_ import JSONReporter
 
 console = Console()
 
@@ -37,20 +41,20 @@ class OutputFormat(StrEnum):
     sarif = "sarif"
 
 
-class Severity(StrEnum):
-    """Niveles de severidad, de mayor a menor."""
-
-    CRITICAL = "CRITICAL"
-    HIGH = "HIGH"
-    MEDIUM = "MEDIUM"
-    LOW = "LOW"
-    INFO = "INFO"
-
-
 def _version_callback(value: bool) -> None:
     if value:
         console.print(f"sastcore {__version__}")
         raise typer.Exit(ExitCode.OK)
+
+
+def _exit_code(findings: list[Finding], fail_on: Severity | None) -> ExitCode:
+    """Determina el código de salida según el umbral ``--fail-on``."""
+    if fail_on is None:
+        return ExitCode.OK
+    threshold = severity_rank(fail_on)
+    if any(severity_rank(finding.severity) <= threshold for finding in findings):
+        return ExitCode.FINDINGS
+    return ExitCode.OK
 
 
 @app.callback()
@@ -96,25 +100,43 @@ def scan(
         typer.Option("--baseline", help="Snapshot previo; solo se reportan hallazgos nuevos."),
     ] = None,
 ) -> None:
-    """Escanea código en busca de vulnerabilidades.
-
-    Fase 0: esqueleto. Acepta y valida los argumentos, pero aún no hay motor de
-    análisis; siempre termina con :data:`ExitCode.OK`.
-    """
+    """Escanea código en busca de vulnerabilidades (Fase 1: secretos)."""
     targets = paths if paths else [Path()]
-    # Flags declarados para congelar la superficie CLI; sin efecto en la Fase 0.
-    _ = (output_format, fail_on, baseline)
-    console.print(
-        f"[dim]sastcore {__version__}: 0 reglas cargadas · {len(targets)} objetivo(s) · "
-        "esqueleto de Fase 0, motor no implementado todavía.[/dim]"
-    )
-    raise typer.Exit(ExitCode.OK)
+
+    if baseline is not None:
+        console.print("[yellow]--baseline aún no está implementado (llega en la Fase 5).[/yellow]")
+
+    scheduler = Scheduler()
+    findings: list[Finding] = []
+    files_scanned = 0
+    for target in targets:
+        if target.is_dir():
+            result = scheduler.run(target)
+        elif target.is_file():
+            result = scheduler.run_file(target)
+        else:
+            console.print(f"[red]Ruta no encontrada:[/red] {target}")
+            raise typer.Exit(ExitCode.ERROR)
+        findings.extend(result.findings)
+        files_scanned += result.files_scanned
+
+    findings = deduplicate(findings)
+
+    if output_format is OutputFormat.json:
+        print(JSONReporter().render(findings, files_scanned=files_scanned))
+    elif output_format is OutputFormat.sarif:
+        console.print("[yellow]El reporter SARIF llega en la Fase 5.[/yellow]")
+        raise typer.Exit(ExitCode.ERROR)
+    else:
+        ConsoleReporter(console).render(findings, files_scanned=files_scanned)
+
+    raise typer.Exit(_exit_code(findings, fail_on))
 
 
 @rules_app.command("list")
 def rules_list() -> None:
-    """Lista las reglas cargadas. Fase 0: aún no hay rulepacks."""
-    console.print("0 reglas disponibles (los rulepacks llegan en la Fase 3).")
+    """Lista las reglas cargadas. Fase 1: solo detectores de secretos, sin rulepacks YAML."""
+    console.print("Detectores de secretos activos (los rulepacks YAML llegan en la Fase 3).")
     raise typer.Exit(ExitCode.OK)
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,8 @@ from typer.testing import CliRunner
 from sastcore import __version__
 from sastcore.cli import app
 from sastcore.exit_codes import ExitCode
+
+_DIRTY_FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "dirty"
 
 
 def test_version_flag(runner: CliRunner) -> None:
@@ -51,6 +54,24 @@ def test_rules_list_stub(runner: CliRunner) -> None:
 def test_unknown_command_errors(runner: CliRunner) -> None:
     result = runner.invoke(app, ["definitely-not-a-command"])
     assert result.exit_code != ExitCode.OK
+
+
+def test_scan_dirty_fixture_fail_on_high_exits_findings(runner: CliRunner) -> None:
+    result = runner.invoke(app, ["scan", str(_DIRTY_FIXTURE), "--fail-on", "HIGH"])
+    assert result.exit_code == ExitCode.FINDINGS
+
+
+def test_scan_json_format(runner: CliRunner) -> None:
+    result = runner.invoke(app, ["scan", str(_DIRTY_FIXTURE), "--format", "json"])
+    assert result.exit_code == ExitCode.OK
+    data = json.loads(result.output)
+    assert data["tool"] == "sastcore"
+    assert len(data["findings"]) > 0
+
+
+def test_scan_missing_path_exits_error(runner: CliRunner) -> None:
+    result = runner.invoke(app, ["scan", "does-not-exist-xyz-123"])
+    assert result.exit_code == ExitCode.ERROR
 
 
 def test_module_entrypoint() -> None:
