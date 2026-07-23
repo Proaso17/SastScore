@@ -13,6 +13,7 @@ from rich.console import Console
 
 from sastcore import __version__
 from sastcore._logging import configure_logging
+from sastcore.engine.pattern.pass_ import default_pattern_pass
 from sastcore.engine.scheduler import Scheduler
 from sastcore.exit_codes import ExitCode
 from sastcore.findings.dedup import deduplicate
@@ -106,7 +107,7 @@ def scan(
     if baseline is not None:
         console.print("[yellow]--baseline aún no está implementado (llega en la Fase 5).[/yellow]")
 
-    scheduler = Scheduler()
+    scheduler = Scheduler(pattern_pass=default_pattern_pass())
     findings: list[Finding] = []
     files_scanned = 0
     for target in targets:
