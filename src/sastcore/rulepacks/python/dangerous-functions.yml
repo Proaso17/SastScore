@@ -1,0 +1,55 @@
+- id: py.dangerous.os-system
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: >-
+    Ejecución de comando del sistema con os.system; riesgo de inyección de comandos
+    si la entrada no es de confianza.
+  cwe: ["CWE-78"]
+  owasp: "A03:2021-Injection"
+  pattern: "os.system($X)"
+  fix_suggestion: >-
+    Usa subprocess con una lista de argumentos y sin shell:
+    subprocess.run(["cmd", arg], check=True).
+  references:
+    - https://cwe.mitre.org/data/definitions/78.html
+  tests:
+    bad: tests/rules/fixtures/python/py.dangerous.os-system_bad.py
+    good: tests/rules/fixtures/python/py.dangerous.os-system_good.py
+
+- id: py.dangerous.eval
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: >-
+    Uso de eval(); ejecución de código arbitrario si la entrada no es de confianza.
+  cwe: ["CWE-95"]
+  owasp: "A03:2021-Injection"
+  pattern: "eval($X)"
+  fix_suggestion: >-
+    Evita eval(). Para datos, usa ast.literal_eval; para lógica, un despacho explícito.
+  references:
+    - https://cwe.mitre.org/data/definitions/95.html
+  tests:
+    bad: tests/rules/fixtures/python/py.dangerous.eval_bad.py
+    good: tests/rules/fixtures/python/py.dangerous.eval_good.py
+
+- id: py.dangerous.yaml-load
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: >-
+    yaml.load con un solo argumento usa el Loader por defecto y permite deserialización
+    insegura.
+  cwe: ["CWE-502"]
+  owasp: "A08:2021-Software and Data Integrity Failures"
+  pattern: "yaml.load($X)"
+  fix_suggestion: "Usa yaml.safe_load($X) o yaml.load($X, Loader=yaml.SafeLoader)."
+  references:
+    - https://cwe.mitre.org/data/definitions/502.html
+  tests:
+    bad: tests/rules/fixtures/python/py.dangerous.yaml-load_bad.py
+    good: tests/rules/fixtures/python/py.dangerous.yaml-load_good.py

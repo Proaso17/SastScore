@@ -1,0 +1,37 @@
+- id: js.dangerous.eval
+  languages: [javascript, typescript]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: >-
+    Uso de eval(); ejecución de código arbitrario si la entrada no es de confianza.
+  cwe: ["CWE-95"]
+  owasp: "A03:2021-Injection"
+  pattern: "eval($X)"
+  fix_suggestion: "Evita eval(). Usa JSON.parse para datos o una tabla de despacho para lógica."
+  references:
+    - https://cwe.mitre.org/data/definitions/95.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.dangerous.eval_bad.js
+    good: tests/rules/fixtures/javascript/js.dangerous.eval_good.js
+
+- id: js.dangerous.child-process-exec
+  languages: [javascript, typescript]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: >-
+    child_process.exec ejecuta un shell; riesgo de inyección de comandos con entrada
+    no confiable.
+  cwe: ["CWE-78"]
+  owasp: "A03:2021-Injection"
+  pattern-either:
+    - "child_process.exec($X)"
+    - "cp.exec($X)"
+  fix_suggestion: >-
+    Usa execFile o spawn con una lista de argumentos y sin shell.
+  references:
+    - https://cwe.mitre.org/data/definitions/78.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.dangerous.child-process-exec_bad.js
+    good: tests/rules/fixtures/javascript/js.dangerous.child-process-exec_good.js
