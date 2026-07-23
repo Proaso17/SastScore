@@ -99,3 +99,8 @@ Taint (Fase 4, por ADR-0003):
   parse-once; motor de matching estructural con metavariables y elipsis; modelo/loader/
   validador de rulepacks YAML (rechaza reglas sin fixtures); rulepack de funciones
   peligrosas (py/js); supresión inline `sastcore:ignore`.
+- **Fase 3 (completa):** ~31 reglas de alta señal cubriendo OWASP Top 10 (crypto débil,
+  deserialización, inyección de comandos, code injection, XSS DOM, TLS sin verificar,
+  `debug=True`), cada una con fixtures `bad`/`good`. Las reglas taint-dependientes
+  (SQLi/XSS por asignación) van como `confidence: LOW` hasta la Fase 4. El matcher
+  compara literales string ignorando el estilo de comillas.
