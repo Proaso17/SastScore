@@ -37,6 +37,17 @@ def _is_ellipsis(node: Node) -> bool:
     return not node.named_children and node.text == ELLIPSIS_SENTINEL
 
 
+_QUOTES = "\"'`"
+
+
+def _string_content(node: Node) -> str:
+    """Contenido de un literal string sin las comillas (para comparar sin importar estilo)."""
+    text = node.text
+    if len(text) >= 2 and text[0] in _QUOTES and text[-1] == text[0]:
+        return text[1:-1]
+    return text
+
+
 def _match(pat: Node, tgt: Node, binds: _Bindings) -> _Bindings | None:
     name = _metavar_name(pat)
     if name is not None:
@@ -47,6 +58,11 @@ def _match(pat: Node, tgt: Node, binds: _Bindings) -> _Bindings | None:
 
     if pat.type != tgt.type:
         return None
+
+    # Los literales string se comparan por contenido, ignorando el estilo de comillas
+    # (coherente con "ignorar formato"): "md5" y 'md5' casan igual.
+    if pat.type == "string":
+        return binds if _string_content(pat) == _string_content(tgt) else None
 
     pat_named = pat.named_children
     tgt_named = tgt.named_children

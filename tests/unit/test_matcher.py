@@ -51,6 +51,14 @@ def test_ellipsis_matches_zero_args() -> None:
     assert len(_matches(Language.python, "f(...)", "f()")) == 1
 
 
+def test_string_literal_quote_insensitive() -> None:
+    assert len(_matches(Language.javascript, 'f("x")', "f('x');")) == 1
+
+
+def test_string_literal_content_must_match() -> None:
+    assert _matches(Language.javascript, 'f("x")', "f('y');") == []
+
+
 def test_invalid_pattern_raises() -> None:
     with pytest.raises(PatternError):
         compile_pattern(Language.python, "def (:")
