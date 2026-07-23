@@ -1,0 +1,32 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Caches de Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Caches de herramientas
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Cache propia del motor
+.sastcore-cache/
+
+# Config local de Claude Code (personal, no compartida)
+.claude/settings.local.json
+
+# IDE / SO
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
