@@ -1,0 +1,3 @@
+# Fixture de test: cadena de conexion con contrasena (valor falso).
+database:
+  url: "postgres://admin:sup3rS3cret@db.example.com:5432/app"
