@@ -35,3 +35,55 @@
   tests:
     bad: tests/rules/fixtures/javascript/js.dangerous.child-process-exec_bad.js
     good: tests/rules/fixtures/javascript/js.dangerous.child-process-exec_good.js
+
+- id: js.dangerous.child-process-exec-sync
+  languages: [javascript, typescript]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "child_process.execSync ejecuta un shell; riesgo de inyección de comandos."
+  cwe: ["CWE-78"]
+  owasp: "A03:2021-Injection"
+  pattern-either:
+    - "child_process.execSync($X)"
+    - "cp.execSync($X)"
+  fix_suggestion: "Usa execFileSync o spawnSync con una lista de argumentos y sin shell."
+  references:
+    - https://cwe.mitre.org/data/definitions/78.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.dangerous.child-process-exec-sync_bad.js
+    good: tests/rules/fixtures/javascript/js.dangerous.child-process-exec-sync_good.js
+
+- id: js.dangerous.new-function
+  languages: [javascript, typescript]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "new Function() compila código a partir de una cadena; equivale a eval()."
+  cwe: ["CWE-95"]
+  owasp: "A03:2021-Injection"
+  pattern: "new Function($X)"
+  fix_suggestion: "Evita construir funciones desde cadenas; usa una tabla de despacho."
+  references:
+    - https://cwe.mitre.org/data/definitions/95.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.dangerous.new-function_bad.js
+    good: tests/rules/fixtures/javascript/js.dangerous.new-function_good.js
+
+- id: js.dangerous.vm-run
+  languages: [javascript, typescript]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "vm.runInNewContext/runInThisContext ejecuta código arbitrario."
+  cwe: ["CWE-95"]
+  owasp: "A03:2021-Injection"
+  pattern-either:
+    - "vm.runInNewContext($X)"
+    - "vm.runInThisContext($X)"
+  fix_suggestion: "No ejecutes código no confiable; si es imprescindible, aísla con un sandbox real."
+  references:
+    - https://cwe.mitre.org/data/definitions/95.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.dangerous.vm-run_bad.js
+    good: tests/rules/fixtures/javascript/js.dangerous.vm-run_good.js

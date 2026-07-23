@@ -1,0 +1,65 @@
+- id: js.xss.document-write
+  languages: [javascript, typescript]
+  mode: pattern
+  severity: MEDIUM
+  confidence: LOW
+  message: "document.write con datos no confiables provoca XSS basado en DOM."
+  cwe: ["CWE-79"]
+  owasp: "A03:2021-Injection"
+  pattern-either:
+    - "document.write($X)"
+    - "document.writeln($X)"
+  fix_suggestion: "Construye el DOM con textContent/createElement en vez de escribir HTML."
+  references:
+    - https://cwe.mitre.org/data/definitions/79.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.xss.document-write_bad.js
+    good: tests/rules/fixtures/javascript/js.xss.document-write_good.js
+
+- id: js.xss.inner-html
+  languages: [javascript, typescript]
+  mode: pattern
+  severity: MEDIUM
+  confidence: LOW
+  message: "Asignar a innerHTML con datos no confiables provoca XSS basado en DOM."
+  cwe: ["CWE-79"]
+  owasp: "A03:2021-Injection"
+  pattern: "$X.innerHTML = $Y"
+  fix_suggestion: "Usa textContent, o sanea el HTML con una librería como DOMPurify."
+  references:
+    - https://cwe.mitre.org/data/definitions/79.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.xss.inner-html_bad.js
+    good: tests/rules/fixtures/javascript/js.xss.inner-html_good.js
+
+- id: js.xss.outer-html
+  languages: [javascript, typescript]
+  mode: pattern
+  severity: MEDIUM
+  confidence: LOW
+  message: "Asignar a outerHTML con datos no confiables provoca XSS basado en DOM."
+  cwe: ["CWE-79"]
+  owasp: "A03:2021-Injection"
+  pattern: "$X.outerHTML = $Y"
+  fix_suggestion: "Usa textContent, o sanea el HTML con una librería como DOMPurify."
+  references:
+    - https://cwe.mitre.org/data/definitions/79.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.xss.outer-html_bad.js
+    good: tests/rules/fixtures/javascript/js.xss.outer-html_good.js
+
+- id: js.xss.insert-adjacent-html
+  languages: [javascript, typescript]
+  mode: pattern
+  severity: MEDIUM
+  confidence: LOW
+  message: "insertAdjacentHTML con datos no confiables provoca XSS basado en DOM."
+  cwe: ["CWE-79"]
+  owasp: "A03:2021-Injection"
+  pattern: "$X.insertAdjacentHTML($Y, $Z)"
+  fix_suggestion: "Usa insertAdjacentText, o sanea el HTML antes de insertarlo."
+  references:
+    - https://cwe.mitre.org/data/definitions/79.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.xss.insert-adjacent-html_bad.js
+    good: tests/rules/fixtures/javascript/js.xss.insert-adjacent-html_good.js

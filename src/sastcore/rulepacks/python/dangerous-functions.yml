@@ -53,3 +53,34 @@
   tests:
     bad: tests/rules/fixtures/python/py.dangerous.yaml-load_bad.py
     good: tests/rules/fixtures/python/py.dangerous.yaml-load_good.py
+
+- id: py.dangerous.exec
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "Uso de exec(); ejecución de código arbitrario si la entrada no es de confianza."
+  cwe: ["CWE-95"]
+  owasp: "A03:2021-Injection"
+  pattern: "exec($X)"
+  fix_suggestion: "Evita exec(); reestructura con un despacho explícito de funciones."
+  references:
+    - https://cwe.mitre.org/data/definitions/95.html
+  tests:
+    bad: tests/rules/fixtures/python/py.dangerous.exec_bad.py
+    good: tests/rules/fixtures/python/py.dangerous.exec_good.py
+
+- id: py.dangerous.tempfile-mktemp
+  languages: [python]
+  mode: pattern
+  severity: MEDIUM
+  confidence: HIGH
+  message: "tempfile.mktemp tiene una condición de carrera (TOCTOU); es inseguro."
+  cwe: ["CWE-377"]
+  pattern: "tempfile.mktemp(...)"
+  fix_suggestion: "Usa tempfile.mkstemp() o tempfile.NamedTemporaryFile()."
+  references:
+    - https://cwe.mitre.org/data/definitions/377.html
+  tests:
+    bad: tests/rules/fixtures/python/py.dangerous.tempfile-mktemp_bad.py
+    good: tests/rules/fixtures/python/py.dangerous.tempfile-mktemp_good.py

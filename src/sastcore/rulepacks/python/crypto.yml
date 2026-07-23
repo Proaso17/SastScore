@@ -1,0 +1,88 @@
+- id: py.crypto.weak-hash-md5
+  languages: [python]
+  mode: pattern
+  severity: MEDIUM
+  confidence: HIGH
+  message: "MD5 es un hash criptográficamente roto; no lo uses para seguridad."
+  cwe: ["CWE-328"]
+  owasp: "A02:2021-Cryptographic Failures"
+  pattern: "hashlib.md5($X)"
+  fix_suggestion: "Usa hashlib.sha256 o superior; para contraseñas, bcrypt/argon2."
+  references:
+    - https://cwe.mitre.org/data/definitions/328.html
+  tests:
+    bad: tests/rules/fixtures/python/py.crypto.weak-hash-md5_bad.py
+    good: tests/rules/fixtures/python/py.crypto.weak-hash-md5_good.py
+
+- id: py.crypto.weak-hash-sha1
+  languages: [python]
+  mode: pattern
+  severity: MEDIUM
+  confidence: HIGH
+  message: "SHA-1 está obsoleto y es vulnerable a colisiones; no lo uses para seguridad."
+  cwe: ["CWE-328"]
+  owasp: "A02:2021-Cryptographic Failures"
+  pattern: "hashlib.sha1($X)"
+  fix_suggestion: "Usa hashlib.sha256 o superior."
+  references:
+    - https://cwe.mitre.org/data/definitions/328.html
+  tests:
+    bad: tests/rules/fixtures/python/py.crypto.weak-hash-sha1_bad.py
+    good: tests/rules/fixtures/python/py.crypto.weak-hash-sha1_good.py
+
+- id: py.crypto.weak-hash-new
+  languages: [python]
+  mode: pattern
+  severity: MEDIUM
+  confidence: HIGH
+  message: "hashlib.new con un algoritmo débil (MD5/SHA-1)."
+  cwe: ["CWE-328"]
+  owasp: "A02:2021-Cryptographic Failures"
+  pattern-either:
+    - 'hashlib.new("md5", ...)'
+    - 'hashlib.new("sha1", ...)'
+  fix_suggestion: "Usa un algoritmo moderno: hashlib.new(\"sha256\", ...)."
+  references:
+    - https://cwe.mitre.org/data/definitions/328.html
+  tests:
+    bad: tests/rules/fixtures/python/py.crypto.weak-hash-new_bad.py
+    good: tests/rules/fixtures/python/py.crypto.weak-hash-new_good.py
+
+- id: py.crypto.requests-no-verify
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: HIGH
+  message: "Petición HTTPS con verify=False: se desactiva la validación del certificado TLS."
+  cwe: ["CWE-295"]
+  owasp: "A02:2021-Cryptographic Failures"
+  pattern-either:
+    - "requests.get(..., verify=False)"
+    - "requests.post(..., verify=False)"
+    - "requests.put(..., verify=False)"
+    - "requests.delete(..., verify=False)"
+    - "requests.patch(..., verify=False)"
+    - "requests.head(..., verify=False)"
+    - "requests.request(..., verify=False)"
+  fix_suggestion: "No desactives verify; instala la CA correcta o pásala con verify='/ruta/ca.pem'."
+  references:
+    - https://cwe.mitre.org/data/definitions/295.html
+  tests:
+    bad: tests/rules/fixtures/python/py.crypto.requests-no-verify_bad.py
+    good: tests/rules/fixtures/python/py.crypto.requests-no-verify_good.py
+
+- id: py.crypto.ssl-unverified-context
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: HIGH
+  message: "ssl._create_unverified_context desactiva la validación del certificado TLS."
+  cwe: ["CWE-295"]
+  owasp: "A02:2021-Cryptographic Failures"
+  pattern: "ssl._create_unverified_context(...)"
+  fix_suggestion: "Usa ssl.create_default_context()."
+  references:
+    - https://cwe.mitre.org/data/definitions/295.html
+  tests:
+    bad: tests/rules/fixtures/python/py.crypto.ssl-unverified-context_bad.py
+    good: tests/rules/fixtures/python/py.crypto.ssl-unverified-context_good.py

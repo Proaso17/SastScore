@@ -1,0 +1,33 @@
+- id: js.crypto.weak-hash
+  languages: [javascript, typescript]
+  mode: pattern
+  severity: MEDIUM
+  confidence: HIGH
+  message: "Hash criptográficamente roto (MD5/SHA-1) con crypto.createHash."
+  cwe: ["CWE-328"]
+  owasp: "A02:2021-Cryptographic Failures"
+  pattern-either:
+    - 'crypto.createHash("md5")'
+    - 'crypto.createHash("sha1")'
+  fix_suggestion: "Usa sha256 o superior; para contraseñas, bcrypt/scrypt/argon2."
+  references:
+    - https://cwe.mitre.org/data/definitions/328.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.crypto.weak-hash_bad.js
+    good: tests/rules/fixtures/javascript/js.crypto.weak-hash_good.js
+
+- id: js.crypto.create-cipher
+  languages: [javascript, typescript]
+  mode: pattern
+  severity: HIGH
+  confidence: HIGH
+  message: "crypto.createCipher usa una derivación de clave insegura y está obsoleto."
+  cwe: ["CWE-327"]
+  owasp: "A02:2021-Cryptographic Failures"
+  pattern: "crypto.createCipher($X, $Y)"
+  fix_suggestion: "Usa crypto.createCipheriv con un IV aleatorio."
+  references:
+    - https://cwe.mitre.org/data/definitions/327.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.crypto.create-cipher_bad.js
+    good: tests/rules/fixtures/javascript/js.crypto.create-cipher_good.js

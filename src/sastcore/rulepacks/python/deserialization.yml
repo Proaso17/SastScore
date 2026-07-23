@@ -1,0 +1,63 @@
+- id: py.deser.pickle-load
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "pickle.load deserializa datos arbitrarios; con entrada no confiable permite RCE."
+  cwe: ["CWE-502"]
+  owasp: "A08:2021-Software and Data Integrity Failures"
+  pattern: "pickle.load($X)"
+  fix_suggestion: "Usa un formato seguro (json) o valida/firmar el origen de los datos."
+  references:
+    - https://cwe.mitre.org/data/definitions/502.html
+  tests:
+    bad: tests/rules/fixtures/python/py.deser.pickle-load_bad.py
+    good: tests/rules/fixtures/python/py.deser.pickle-load_good.py
+
+- id: py.deser.pickle-loads
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "pickle.loads deserializa datos arbitrarios; con entrada no confiable permite RCE."
+  cwe: ["CWE-502"]
+  owasp: "A08:2021-Software and Data Integrity Failures"
+  pattern: "pickle.loads($X)"
+  fix_suggestion: "Usa un formato seguro (json) o valida/firmar el origen de los datos."
+  references:
+    - https://cwe.mitre.org/data/definitions/502.html
+  tests:
+    bad: tests/rules/fixtures/python/py.deser.pickle-loads_bad.py
+    good: tests/rules/fixtures/python/py.deser.pickle-loads_good.py
+
+- id: py.deser.marshal-loads
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "marshal.loads deserializa datos arbitrarios de forma insegura."
+  cwe: ["CWE-502"]
+  owasp: "A08:2021-Software and Data Integrity Failures"
+  pattern: "marshal.loads($X)"
+  fix_suggestion: "No deserialices datos no confiables con marshal; usa json."
+  references:
+    - https://cwe.mitre.org/data/definitions/502.html
+  tests:
+    bad: tests/rules/fixtures/python/py.deser.marshal-loads_bad.py
+    good: tests/rules/fixtures/python/py.deser.marshal-loads_good.py
+
+- id: py.deser.yaml-unsafe-load
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "yaml.unsafe_load permite construir objetos arbitrarios de Python."
+  cwe: ["CWE-502"]
+  owasp: "A08:2021-Software and Data Integrity Failures"
+  pattern: "yaml.unsafe_load($X)"
+  fix_suggestion: "Usa yaml.safe_load."
+  references:
+    - https://cwe.mitre.org/data/definitions/502.html
+  tests:
+    bad: tests/rules/fixtures/python/py.deser.yaml-unsafe-load_bad.py
+    good: tests/rules/fixtures/python/py.deser.yaml-unsafe-load_good.py

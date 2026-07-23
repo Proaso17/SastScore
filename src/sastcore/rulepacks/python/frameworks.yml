@@ -1,0 +1,51 @@
+- id: py.flask.debug-run
+  languages: [python]
+  mode: pattern
+  severity: MEDIUM
+  confidence: MEDIUM
+  message: "Servidor arrancado con debug=True: expone el debugger de Werkzeug (RCE) en producción."
+  cwe: ["CWE-489"]
+  owasp: "A05:2021-Security Misconfiguration"
+  pattern: "$APP.run(..., debug=True)"
+  fix_suggestion: "No uses debug=True en producción; contrólalo con una variable de entorno."
+  references:
+    - https://cwe.mitre.org/data/definitions/489.html
+  tests:
+    bad: tests/rules/fixtures/python/py.flask.debug-run_bad.py
+    good: tests/rules/fixtures/python/py.flask.debug-run_good.py
+
+- id: py.django.raw-sql
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: LOW
+  message: "Consulta SQL cruda; si se construye con entrada no confiable, hay inyección SQL."
+  cwe: ["CWE-89"]
+  owasp: "A03:2021-Injection"
+  pattern-either:
+    - "$M.raw($SQL)"
+    - "$M.extra(...)"
+  fix_suggestion: "Usa el ORM o consultas parametrizadas; nunca concatenes entrada del usuario."
+  references:
+    - https://cwe.mitre.org/data/definitions/89.html
+  tests:
+    bad: tests/rules/fixtures/python/py.django.raw-sql_bad.py
+    good: tests/rules/fixtures/python/py.django.raw-sql_good.py
+
+- id: py.xss.flask-markup
+  languages: [python]
+  mode: pattern
+  severity: MEDIUM
+  confidence: LOW
+  message: "mark_safe/Markup desactiva el autoescapado; con entrada no confiable hay XSS."
+  cwe: ["CWE-79"]
+  owasp: "A03:2021-Injection"
+  pattern-either:
+    - "mark_safe($X)"
+    - "Markup($X)"
+  fix_suggestion: "Deja que el motor de plantillas autoescape; escapa explícitamente si hace falta."
+  references:
+    - https://cwe.mitre.org/data/definitions/79.html
+  tests:
+    bad: tests/rules/fixtures/python/py.xss.flask-markup_bad.py
+    good: tests/rules/fixtures/python/py.xss.flask-markup_good.py

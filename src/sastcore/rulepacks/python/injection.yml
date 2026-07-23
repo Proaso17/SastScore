@@ -1,0 +1,54 @@
+- id: py.injection.subprocess-shell-true
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "subprocess con shell=True lanza un shell; riesgo de inyección de comandos."
+  cwe: ["CWE-78"]
+  owasp: "A03:2021-Injection"
+  pattern-either:
+    - "subprocess.run(..., shell=True)"
+    - "subprocess.call(..., shell=True)"
+    - "subprocess.check_call(..., shell=True)"
+    - "subprocess.check_output(..., shell=True)"
+    - "subprocess.Popen(..., shell=True)"
+  fix_suggestion: "Pasa una lista de argumentos y shell=False (por defecto)."
+  references:
+    - https://cwe.mitre.org/data/definitions/78.html
+  tests:
+    bad: tests/rules/fixtures/python/py.injection.subprocess-shell-true_bad.py
+    good: tests/rules/fixtures/python/py.injection.subprocess-shell-true_good.py
+
+- id: py.injection.os-popen
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "os.popen ejecuta a través de un shell; riesgo de inyección de comandos."
+  cwe: ["CWE-78"]
+  owasp: "A03:2021-Injection"
+  pattern: "os.popen($X)"
+  fix_suggestion: "Usa subprocess con una lista de argumentos y sin shell."
+  references:
+    - https://cwe.mitre.org/data/definitions/78.html
+  tests:
+    bad: tests/rules/fixtures/python/py.injection.os-popen_bad.py
+    good: tests/rules/fixtures/python/py.injection.os-popen_good.py
+
+- id: py.injection.subprocess-getoutput
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "subprocess.getoutput/getstatusoutput ejecuta a través de un shell."
+  cwe: ["CWE-78"]
+  owasp: "A03:2021-Injection"
+  pattern-either:
+    - "subprocess.getoutput($X)"
+    - "subprocess.getstatusoutput($X)"
+  fix_suggestion: "Usa subprocess.run con una lista de argumentos y sin shell."
+  references:
+    - https://cwe.mitre.org/data/definitions/78.html
+  tests:
+    bad: tests/rules/fixtures/python/py.injection.subprocess-getoutput_bad.py
+    good: tests/rules/fixtures/python/py.injection.subprocess-getoutput_good.py
