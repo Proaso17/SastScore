@@ -27,6 +27,7 @@ dependencies = [
     "rich>=13.7",
     "pydantic>=2.6",
     "pyyaml>=6.0",
+    "pathspec>=0.12",
 ]
 
 [project.optional-dependencies]
@@ -80,6 +81,7 @@ files = ["src", "tests"]
 warn_unreachable = true
 warn_redundant_casts = true
 show_error_codes = true
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
