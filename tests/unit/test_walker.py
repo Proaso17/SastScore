@@ -7,11 +7,25 @@ from pathlib import Path
 from sastcore.discovery.walker import FileWalker, is_binary
 
 
+def _names(root: Path) -> set[str]:
+    return {path.name for path, _rel in FileWalker(root).walk()}
+
+
+def _rels(root: Path) -> set[str]:
+    return {rel for _path, rel in FileWalker(root).walk()}
+
+
 def test_lists_text_files(tmp_path: Path) -> None:
     (tmp_path / "a.py").write_text("print(1)\n", encoding="utf-8")
     (tmp_path / "b.js").write_text("console.log(1)\n", encoding="utf-8")
-    names = sorted(p.name for p in FileWalker(tmp_path).walk())
-    assert names == ["a.py", "b.js"]
+    assert _names(tmp_path) == {"a.py", "b.js"}
+
+
+def test_walk_returns_relative_posix_paths(tmp_path: Path) -> None:
+    sub = tmp_path / "pkg"
+    sub.mkdir()
+    (sub / "mod.py").write_text("x = 1\n", encoding="utf-8")
+    assert "pkg/mod.py" in _rels(tmp_path)
 
 
 def test_respects_gitignore(tmp_path: Path) -> None:
@@ -22,7 +36,7 @@ def test_respects_gitignore(tmp_path: Path) -> None:
     ignored.mkdir()
     (ignored / "secret.py").write_text("x\n", encoding="utf-8")
 
-    found = {p.relative_to(tmp_path).as_posix() for p in FileWalker(tmp_path).walk()}
+    found = _rels(tmp_path)
     assert "keep.py" in found
     assert "skip.log" not in found
     assert "ignored/secret.py" not in found
@@ -35,7 +49,7 @@ def test_respects_sastignore(tmp_path: Path) -> None:
     (vendor / "lib.py").write_text("x\n", encoding="utf-8")
     (tmp_path / "app.py").write_text("x\n", encoding="utf-8")
 
-    found = {p.relative_to(tmp_path).as_posix() for p in FileWalker(tmp_path).walk()}
+    found = _rels(tmp_path)
     assert "app.py" in found
     assert "vendor/lib.py" not in found
 
@@ -43,7 +57,7 @@ def test_respects_sastignore(tmp_path: Path) -> None:
 def test_skips_binary(tmp_path: Path) -> None:
     (tmp_path / "bin.dat").write_bytes(b"\x00\x01\x02\x00")
     (tmp_path / "ok.py").write_text("x\n", encoding="utf-8")
-    names = {p.name for p in FileWalker(tmp_path).walk()}
+    names = _names(tmp_path)
     assert "ok.py" in names
     assert "bin.dat" not in names
 
@@ -51,7 +65,7 @@ def test_skips_binary(tmp_path: Path) -> None:
 def test_skips_large_files(tmp_path: Path) -> None:
     (tmp_path / "big.py").write_text("x" * 100, encoding="utf-8")
     (tmp_path / "small.py").write_text("y\n", encoding="utf-8")
-    names = {p.name for p in FileWalker(tmp_path, max_bytes=10).walk()}
+    names = {path.name for path, _rel in FileWalker(tmp_path, max_bytes=10).walk()}
     assert "small.py" in names
     assert "big.py" not in names
 
@@ -61,7 +75,7 @@ def test_prunes_default_ignored_dirs(tmp_path: Path) -> None:
     node_modules.mkdir()
     (node_modules / "dep.js").write_text("x\n", encoding="utf-8")
     (tmp_path / "index.js").write_text("x\n", encoding="utf-8")
-    names = {p.name for p in FileWalker(tmp_path).walk()}
+    names = _names(tmp_path)
     assert "index.js" in names
     assert "dep.js" not in names
 

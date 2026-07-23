@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from sastcore.discovery.languages import Language
 from sastcore.engine.pattern.compile import CompiledPattern, compile_pattern
-from sastcore.engine.pattern.matcher import find_matches
+from sastcore.engine.pattern.matcher import match_node, root_is_metavar
 from sastcore.findings.fingerprint import compute_fingerprint
 from sastcore.findings.model import Engine, Finding, Location
 from sastcore.parsing.ast import Node
@@ -52,20 +53,33 @@ class PatternPass:
         findings: list[Finding] = []
         occurrences: dict[str, int] = {}
 
+        # Un solo recorrido del árbol por fichero: indexamos los nodos por tipo y luego
+        # cada patrón solo se prueba contra los nodos de su tipo raíz.
+        nodes_by_type: dict[str, list[Node]] = defaultdict(list)
+        for node in tree.walk_preorder():
+            nodes_by_type[node.type].append(node)
+
         for entry in self._compiled:
             if entry.language != language:
                 continue
             for pattern in entry.patterns:
-                for match in find_matches(pattern, tree):
-                    start_row, start_col = match.node.start_point
-                    end_row, end_col = match.node.end_point
+                if root_is_metavar(pattern):
+                    candidates: list[Node] = [n for nodes in nodes_by_type.values() for n in nodes]
+                else:
+                    candidates = nodes_by_type.get(pattern.root.type, [])
+                for node in candidates:
+                    bindings = match_node(pattern, node)
+                    if bindings is None:
+                        continue
+                    start_row, start_col = node.start_point
+                    end_row, end_col = node.end_point
                     start_line = start_row + 1
 
                     index = occurrences.get(entry.rule.id, 0)
                     occurrences[entry.rule.id] = index + 1
                     fingerprint = compute_fingerprint(
                         rule_id=entry.rule.id,
-                        file_lines=list(file_lines),
+                        file_lines=file_lines,
                         match_line=start_line,
                         occurrence_index=index,
                     )

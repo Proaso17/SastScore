@@ -50,8 +50,8 @@ class Scheduler:
         walker = walker if walker is not None else FileWalker(root)
         findings: list[Finding] = []
         files_scanned = 0
-        for path in walker.walk():
-            findings.extend(self._scan_one(path, path.relative_to(root).as_posix()))
+        for path, rel_path in walker.walk():
+            findings.extend(self._scan_one(path, rel_path))
             files_scanned += 1
         return ScanResult(findings=deduplicate(findings), files_scanned=files_scanned)
 

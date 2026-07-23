@@ -74,15 +74,25 @@ def _match_list(pats: list[Node], tgts: list[Node], binds: _Bindings) -> _Bindin
     return _match_list(pats[1:], tgts[1:], head)
 
 
+def root_is_metavar(pattern: CompiledPattern) -> bool:
+    """Indica si el nodo raíz del patrón es una metavariable (casa cualquier nodo)."""
+    return _metavar_name(pattern.root) is not None
+
+
+def match_node(pattern: CompiledPattern, node: Node) -> _Bindings | None:
+    """Intenta casar ``pattern`` en ``node`` concreto; devuelve las bindings o ``None``."""
+    return _match(pattern.root, node, {})
+
+
 def find_matches(pattern: CompiledPattern, tree: Node) -> list[Match]:
-    """Encuentra todos los matches de ``pattern`` en ``tree``."""
-    core = pattern.root
-    root_is_metavar = _metavar_name(core) is not None
+    """Encuentra todos los matches de ``pattern`` en ``tree`` (recorrido propio)."""
+    is_metavar = root_is_metavar(pattern)
+    core_type = pattern.root.type
     matches: list[Match] = []
     for node in tree.walk_preorder():
-        if not root_is_metavar and node.type != core.type:
+        if not is_metavar and node.type != core_type:
             continue
-        bindings = _match(core, node, {})
+        bindings = match_node(pattern, node)
         if bindings is not None:
             matches.append(Match(node=node, bindings=bindings))
     return matches
