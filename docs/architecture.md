@@ -51,7 +51,19 @@ dependen de él, por eso se diseña contra el esquema **SARIF 2.1.0** desde el i
 
 ## Limitaciones conocidas
 
-Se irán rellenando conforme se implementen las fases. Punto de partida (por ADR-0003):
+Se irán rellenando conforme se implementen las fases.
+
+Pasada de secretos (Fase 1):
+
+- **Sin verificación activa por red**: la validación es puramente estructural (formato +
+  entropía). No se comprueba si un secreto está vivo (respeta el NFR de cero red).
+- **`.gitignore` solo en la raíz**: los ficheros de ignore anidados en subdirectorios
+  todavía no se combinan.
+- **Doble reporte ocasional**: un secreto con nombre de variable sensible (p. ej.
+  `GITHUB_TOKEN`) puede dispararse a la vez por su detector específico y por el genérico
+  de alta entropía. El genérico es de confianza baja por diseño.
+
+Taint (Fase 4, por ADR-0003):
 
 - Taint **path-insensitive**: no se razona sobre las condiciones de las ramas. Un
   sanitizer solo limpia el taint si **domina** el sink en el CFG.
@@ -63,5 +75,9 @@ Se irán rellenando conforme se implementen las fases. Punto de partida (por ADR
 
 ## Estado por fase
 
-- **Fase 0 (en curso):** esqueleto del repo, tooling (ruff + mypy strict + pytest), CI y
+- **Fase 0 (completa):** esqueleto del repo, tooling (ruff + mypy strict + pytest), CI y
   CLI stub con la superficie de comandos congelada.
+- **Fase 1 (completa):** discovery (walker con gitignore/sastignore, binarios, tamaño) +
+  detección de lenguaje; modelo `Finding` contra SARIF, fingerprint estilo
+  `partialFingerprints` y dedup; pasada de secretos (regex + entropía + validación de
+  formato, sin red); reporters de consola y JSON; `scan` cableado con `--fail-on`.

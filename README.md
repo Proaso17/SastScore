@@ -7,8 +7,9 @@ mapeada a **CWE** y **OWASP Top 10**. El objetivo es alta señal y baja tasa de 
 positivos, con salida **SARIF 2.1.0** nativa y **cero telemetría** (no hace llamadas de
 red durante el escaneo).
 
-> **Estado: Fase 0 (esqueleto).** La CLI existe y su superficie está congelada, pero el
-> motor de análisis todavía no está implementado. Ver [el roadmap](#roadmap).
+> **Estado: Fase 1.** Discovery + detección de secretos (regex + entropía) operativos,
+> con salida en consola y JSON. El parsing y el motor de patrones llegan en la Fase 2.
+> Ver [el roadmap](#roadmap).
 
 ## Instalación (desarrollo)
 
@@ -24,8 +25,9 @@ pip install -e ".[dev]"
 
 ```bash
 sastcore --version
-sastcore scan .               # Fase 0: acepta argumentos, aún sin motor
-sastcore rules list
+sastcore scan .                       # escanea en busca de secretos
+sastcore scan . --format json         # salida JSON
+sastcore scan . --fail-on HIGH        # exit 1 si hay hallazgos HIGH o superiores
 ```
 
 Códigos de salida (contrato estable para CI): `0` limpio · `1` hallazgos sobre el umbral ·
@@ -35,8 +37,8 @@ Códigos de salida (contrato estable para CI): `0` limpio · `1` hallazgos sobre
 
 | Fase | Contenido | Estado |
 |------|-----------|--------|
-| 0 | Fundaciones: repo, tooling, CI, CLI stub | 🟢 en curso |
-| 1 | Discovery + pasada de secretos (regex + entropía) | ⚪ pendiente |
+| 0 | Fundaciones: repo, tooling, CI, CLI stub | ✅ hecha |
+| 1 | Discovery + pasada de secretos (regex + entropía) | ✅ hecha |
 | 2 | Parsing tree-sitter + motor de patrones (metavariables, elipsis) | ⚪ pendiente |
 | 3 | Rulepacks core (~40 reglas, OWASP Top 10) | ⚪ pendiente |
 | 4 | Taint analysis (CFG → DFG → propagación → summaries) | ⚪ pendiente |
