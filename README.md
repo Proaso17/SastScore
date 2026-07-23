@@ -7,9 +7,9 @@ mapeada a **CWE** y **OWASP Top 10**. El objetivo es alta señal y baja tasa de 
 positivos, con salida **SARIF 2.1.0** nativa y **cero telemetría** (no hace llamadas de
 red durante el escaneo).
 
-> **Estado: Fase 1.** Discovery + detección de secretos (regex + entropía) operativos,
-> con salida en consola y JSON. El parsing y el motor de patrones llegan en la Fase 2.
-> Ver [el roadmap](#roadmap).
+> **Estado: Fase 2.** Discovery + secretos + **motor de patrones** (tree-sitter, con
+> metavariables y elipsis) y rulepacks YAML operativos, con supresión inline. Salida en
+> consola y JSON. El taint analysis llega en la Fase 4. Ver [el roadmap](#roadmap).
 
 ## Instalación (desarrollo)
 
@@ -39,7 +39,7 @@ Códigos de salida (contrato estable para CI): `0` limpio · `1` hallazgos sobre
 |------|-----------|--------|
 | 0 | Fundaciones: repo, tooling, CI, CLI stub | ✅ hecha |
 | 1 | Discovery + pasada de secretos (regex + entropía) | ✅ hecha |
-| 2 | Parsing tree-sitter + motor de patrones (metavariables, elipsis) | ⚪ pendiente |
+| 2 | Parsing tree-sitter + motor de patrones (metavariables, elipsis) | ✅ hecha |
 | 3 | Rulepacks core (~40 reglas, OWASP Top 10) | ⚪ pendiente |
 | 4 | Taint analysis (CFG → DFG → propagación → summaries) | ⚪ pendiente |
 | 5 | Reporters (SARIF/HTML/MD/JUnit) + modo baseline/CI | ⚪ pendiente |

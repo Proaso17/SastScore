@@ -39,6 +39,7 @@ dependen de él, por eso se diseña contra el esquema **SARIF 2.1.0** desde el i
 | [0001](adr/0001-representacion-ast.md) | Representación AST híbrida (CST↔CST + IR estrecha para taint) | Aceptado |
 | [0002](adr/0002-identidad-y-fingerprint.md) | Identidad de hallazgo estilo SARIF `partialFingerprints` | Aceptado |
 | [0003](adr/0003-precision-del-taint.md) | Taint flow-sensitive, path-insensitive | Aceptado |
+| [0004](adr/0004-estrategia-de-cache.md) | Cache parse-once en el run; persistente cross-run en la Fase 5 | Aceptado |
 
 ## Requisitos no funcionales (objetivos)
 
@@ -52,6 +53,19 @@ dependen de él, por eso se diseña contra el esquema **SARIF 2.1.0** desde el i
 ## Limitaciones conocidas
 
 Se irán rellenando conforme se implementen las fases.
+
+Motor de patrones (Fase 2):
+
+- **Sin distinción de operadores** dentro de expresiones: `a + b` y `a - b` casan igual.
+  Las reglas de funciones peligrosas no dependen de esto.
+- **Elipsis solo en listas** (argumentos, sentencias), no en posiciones arbitrarias.
+- **Sin resolución de imports/alias**: un `child_process.exec` importado como
+  `const { exec } = require(...)` no casa `child_process.exec($X)` (se enumeran alias
+  con `pattern-either`).
+- `.tsx` se parsea con la gramática `typescript` (JSX puede dar nodos ERROR); pendiente
+  de usar la gramática `tsx` dedicada.
+- Operadores del MVP: `pattern` y `pattern-either`. `pattern-not`/`pattern-inside`, más
+  adelante.
 
 Pasada de secretos (Fase 1):
 
@@ -81,3 +95,7 @@ Taint (Fase 4, por ADR-0003):
   detección de lenguaje; modelo `Finding` contra SARIF, fingerprint estilo
   `partialFingerprints` y dedup; pasada de secretos (regex + entropía + validación de
   formato, sin red); reporters de consola y JSON; `scan` cableado con `--fail-on`.
+- **Fase 2 (completa):** parsing tree-sitter (JS/TS/Python) con wrapper AST y
+  parse-once; motor de matching estructural con metavariables y elipsis; modelo/loader/
+  validador de rulepacks YAML (rechaza reglas sin fixtures); rulepack de funciones
+  peligrosas (py/js); supresión inline `sastcore:ignore`.
