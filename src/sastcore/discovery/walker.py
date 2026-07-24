@@ -14,7 +14,7 @@ Limitación conocida (MVP): solo se leen los ficheros de ignore de la raíz; los
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 import pathspec
@@ -90,6 +90,7 @@ class FileWalker:
         *,
         max_bytes: int = _DEFAULT_MAX_BYTES,
         respect_gitignore: bool = True,
+        extra_ignores: Sequence[str] = (),
     ) -> None:
         self.root = root
         self.max_bytes = max_bytes
@@ -98,6 +99,7 @@ class FileWalker:
         if respect_gitignore:
             patterns += _read_ignore_lines(root / ".gitignore")
         patterns += _read_ignore_lines(root / ".sastignore")
+        patterns += list(extra_ignores)
         self._spec = pathspec.PathSpec.from_lines("gitignore", patterns)
 
     def _is_ignored(self, rel_posix: str) -> bool:

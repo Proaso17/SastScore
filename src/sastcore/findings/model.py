@@ -58,6 +58,15 @@ def severity_rank(severity: Severity) -> int:
     return SEVERITY_ORDER.index(severity)
 
 
+#: Orden de confianza de mayor a menor.
+CONFIDENCE_ORDER: tuple[Confidence, ...] = (Confidence.HIGH, Confidence.MEDIUM, Confidence.LOW)
+
+
+def confidence_rank(confidence: Confidence) -> int:
+    """Devuelve el rango numérico de una confianza (0 = más alta)."""
+    return CONFIDENCE_ORDER.index(confidence)
+
+
 @dataclass(frozen=True, slots=True)
 class Location:
     """Ubicación de un hallazgo en un fichero.

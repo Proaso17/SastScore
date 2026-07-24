@@ -1,6 +1,5 @@
 """Interfaz de línea de comandos de sastcore."""
 
-from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -9,6 +8,15 @@ from rich.console import Console
 
 from sastcore import __version__
 from sastcore._logging import configure_logging
+from sastcore.config import (
+    CONFIG_FILENAME,
+    Config,
+    ConfigError,
+    OutputFormat,
+    default_config_yaml,
+    find_config,
+    load_config,
+)
 from sastcore.engine.pattern.pass_ import default_pattern_pass
 from sastcore.engine.scheduler import Scheduler
 from sastcore.engine.taint.pass_ import default_taint_pass
@@ -16,7 +24,7 @@ from sastcore.exit_codes import ExitCode
 from sastcore.findings.baseline import Baseline, filter_new
 from sastcore.findings.cache import FindingsCache, config_hash
 from sastcore.findings.dedup import deduplicate
-from sastcore.findings.model import Finding, Severity, severity_rank
+from sastcore.findings.model import Finding, Severity, confidence_rank, severity_rank
 from sastcore.reporters.base import TextReporter
 from sastcore.reporters.console import ConsoleReporter
 from sastcore.reporters.html import HTMLReporter
@@ -40,17 +48,6 @@ app.add_typer(rules_app, name="rules")
 
 baseline_app = typer.Typer(help="Gestionar el baseline (modo diferencial).", no_args_is_help=True)
 app.add_typer(baseline_app, name="baseline")
-
-
-class OutputFormat(StrEnum):
-    """Formatos de salida soportados por ``scan``."""
-
-    console = "console"
-    json = "json"
-    sarif = "sarif"
-    html = "html"
-    markdown = "markdown"
-    junit = "junit"
 
 
 def _version_callback(value: bool) -> None:
@@ -79,6 +76,28 @@ def _text_reporter(output_format: OutputFormat) -> TextReporter:
     if output_format is OutputFormat.markdown:
         return MarkdownReporter()
     return JUnitReporter()
+
+
+def _load_config(no_config: bool) -> Config:
+    if no_config:
+        return Config()
+    path = find_config(Path.cwd())
+    if path is None:
+        return Config()
+    try:
+        return load_config(path)
+    except ConfigError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(ExitCode.ERROR) from exc
+
+
+def _apply_config_filters(findings: list[Finding], config: Config) -> list[Finding]:
+    disabled = set(config.disabled_rules)
+    result = [finding for finding in findings if finding.rule_id not in disabled]
+    if config.min_confidence is not None:
+        threshold = confidence_rank(config.min_confidence)
+        result = [f for f in result if confidence_rank(f.confidence) <= threshold]
+    return result
 
 
 def _scan_targets(scheduler: Scheduler, targets: list[Path]) -> tuple[list[Finding], int]:
@@ -128,9 +147,9 @@ def scan(
         ),
     ] = None,
     output_format: Annotated[
-        OutputFormat,
-        typer.Option("--format", "-f", help="Formato de salida."),
-    ] = OutputFormat.console,
+        OutputFormat | None,
+        typer.Option("--format", "-f", help="Formato de salida (default: console)."),
+    ] = None,
     output: Annotated[
         Path | None,
         typer.Option(
@@ -148,17 +167,28 @@ def scan(
     no_cache: Annotated[
         bool, typer.Option("--no-cache", help="Desactiva la cache incremental de hallazgos.")
     ] = False,
+    no_config: Annotated[
+        bool, typer.Option("--no-config", help="Ignora el fichero .sastcore.yml.")
+    ] = False,
 ) -> None:
     """Escanea código en busca de secretos, patrones y flujos de taint."""
     targets = paths if paths else [Path()]
+    config = _load_config(no_config)
+
+    resolved_format = output_format or config.format or OutputFormat.console
+    resolved_fail_on = fail_on if fail_on is not None else config.fail_on
 
     cache = (
         None if no_cache else FindingsCache(Path.cwd(), config=config_hash(default_rulepacks_dir()))
     )
     scheduler = Scheduler(
-        pattern_pass=default_pattern_pass(), taint_pass=default_taint_pass(), cache=cache
+        pattern_pass=default_pattern_pass(),
+        taint_pass=default_taint_pass(),
+        cache=cache,
+        extra_ignores=config.exclude,
     )
     findings, files_scanned = _scan_targets(scheduler, targets)
+    findings = _apply_config_filters(findings, config)
 
     if baseline is not None:
         if not baseline.is_file():
@@ -166,17 +196,35 @@ def scan(
             raise typer.Exit(ExitCode.ERROR)
         findings = filter_new(findings, Baseline.load(baseline))
 
-    if output_format is OutputFormat.console:
+    if resolved_format is OutputFormat.console:
         ConsoleReporter(console).render(findings, files_scanned=files_scanned)
     else:
-        text = _text_reporter(output_format).render(findings, files_scanned=files_scanned)
+        text = _text_reporter(resolved_format).render(findings, files_scanned=files_scanned)
         if output is not None:
             output.write_text(text, encoding="utf-8")
-            console.print(f"[dim]Informe {output_format.value} escrito en {output}.[/dim]")
+            console.print(f"[dim]Informe {resolved_format.value} escrito en {output}.[/dim]")
         else:
             print(text)
 
-    raise typer.Exit(_exit_code(findings, fail_on))
+    raise typer.Exit(_exit_code(findings, resolved_fail_on))
+
+
+@app.command()
+def init(
+    force: Annotated[
+        bool, typer.Option("--force", help="Sobrescribe el fichero si ya existe.")
+    ] = False,
+) -> None:
+    """Genera un fichero de configuración .sastcore.yml en el directorio actual."""
+    path = Path.cwd() / CONFIG_FILENAME
+    if path.exists() and not force:
+        console.print(
+            f"[yellow]{CONFIG_FILENAME} ya existe. Usa --force para sobrescribir.[/yellow]"
+        )
+        raise typer.Exit(ExitCode.ERROR)
+    path.write_text(default_config_yaml(), encoding="utf-8")
+    console.print(f"Configuración escrita en {path}.")
+    raise typer.Exit(ExitCode.OK)
 
 
 @baseline_app.command("create")

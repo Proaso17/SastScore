@@ -9,6 +9,7 @@ de introducir procesos).
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -44,16 +45,20 @@ class Scheduler:
         pattern_pass: PatternPass | None = None,
         taint_pass: TaintPass | None = None,
         cache: FindingsCache | None = None,
+        extra_ignores: Sequence[str] = (),
     ) -> None:
         self._secrets = secrets_pass if secrets_pass is not None else SecretsPass()
         self._pattern = pattern_pass
         self._taint = taint_pass
         self._cache = cache
+        self._extra_ignores = tuple(extra_ignores)
         self._parse_cache = ParseCache()
 
     def run(self, root: Path, *, walker: FileWalker | None = None) -> ScanResult:
         """Escanea el directorio ``root`` y devuelve los hallazgos deduplicados."""
-        walker = walker if walker is not None else FileWalker(root)
+        walker = (
+            walker if walker is not None else FileWalker(root, extra_ignores=self._extra_ignores)
+        )
         findings: list[Finding] = []
         files_scanned = 0
         for path, rel_path in walker.walk():
