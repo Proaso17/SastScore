@@ -19,6 +19,31 @@ class RuleTests(BaseModel):
     good: str
 
 
+class TaintSource(BaseModel):
+    """Origen de datos no confiables (patrón)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pattern: str
+
+
+class TaintSanitizer(BaseModel):
+    """Función/expresión que limpia el taint (patrón)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pattern: str
+
+
+class TaintSink(BaseModel):
+    """Punto peligroso donde no debe llegar dato tainted (patrón + argumento)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pattern: str
+    taint_arg: int = 0
+
+
 class Rule(BaseModel):
     """Una regla de análisis."""
 
@@ -34,16 +59,21 @@ class Rule(BaseModel):
     owasp: str | None = None
     pattern: str | None = None
     pattern_either: list[str] = Field(default_factory=list, alias="pattern-either")
+    sources: list[TaintSource] = Field(default_factory=list)
+    sanitizers: list[TaintSanitizer] = Field(default_factory=list)
+    sinks: list[TaintSink] = Field(default_factory=list)
     fix_suggestion: str | None = None
     references: list[str] = Field(default_factory=list)
     tests: RuleTests
 
     @model_validator(mode="after")
-    def _check_pattern_mode(self) -> Rule:
+    def _check_mode(self) -> Rule:
         if self.mode == "pattern" and not self.pattern and not self.pattern_either:
             raise ValueError(
                 f"regla {self.id}: el modo 'pattern' requiere 'pattern' o 'pattern-either'"
             )
+        if self.mode == "taint" and (not self.sources or not self.sinks):
+            raise ValueError(f"regla {self.id}: el modo 'taint' requiere 'sources' y 'sinks'")
         return self
 
     def patterns(self) -> list[str]:
