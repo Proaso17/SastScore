@@ -39,7 +39,7 @@ dependen de él, por eso se diseña contra el esquema **SARIF 2.1.0** desde el i
 | [0001](adr/0001-representacion-ast.md) | Representación AST híbrida (CST↔CST + IR estrecha para taint) | Aceptado |
 | [0002](adr/0002-identidad-y-fingerprint.md) | Identidad de hallazgo estilo SARIF `partialFingerprints` | Aceptado |
 | [0003](adr/0003-precision-del-taint.md) | Taint flow-sensitive, path-insensitive | Aceptado |
-| [0004](adr/0004-estrategia-de-cache.md) | Cache parse-once en el run; persistente cross-run en la Fase 5 | Aceptado |
+| [0004](adr/0004-estrategia-de-cache.md) | Cache parse-once en el run + persistente cross-run (implementada en Fase 5) | Aceptado |
 | [0005](adr/0005-tree-sitter-gc-workaround.md) | Workaround del GC/ciclo de vida de tree-sitter (materialización + GC off + os._exit) | Aceptado |
 
 ## Requisitos no funcionales (objetivos)
@@ -116,3 +116,8 @@ Taint (Fase 4, por ADR-0003):
   (SQLi y command injection en py/js) con traza `data_flow` (source → asignaciones → sink).
   Los 5 casos de la sección 8 verificados. Segfaults del binding tree-sitter resueltos
   (ADR-0005).
+- **Fase 5 (completa):** reporters SARIF 2.1.0 (con `codeFlows`/`threadFlows` desde las
+  trazas de taint, `partialFingerprints`, `security-severity`), HTML autocontenido,
+  Markdown (PR) y JUnit XML; modo baseline (`baseline create` + `scan --baseline`, solo
+  hallazgos nuevos); cache persistente cross-run por hash de contenido (ADR-0004); flags
+  `--output`, `--baseline`, `--no-cache`.

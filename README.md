@@ -7,9 +7,9 @@ mapeada a **CWE** y **OWASP Top 10**. El objetivo es alta señal y baja tasa de 
 positivos, con salida **SARIF 2.1.0** nativa y **cero telemetría** (no hace llamadas de
 red durante el escaneo).
 
-> **Estado: Fase 4.** Discovery + secretos + motor de patrones (~31 reglas OWASP Top 10) +
-> **taint analysis** (inyección SQL/comandos con traza de flujo de datos source→sink),
-> supresión inline y salida consola/JSON. Ver [el roadmap](#roadmap).
+> **Estado: Fase 5.** Discovery + secretos + patrones (~31 reglas) + **taint analysis**
+> (traza source→sink), con **reporters SARIF 2.1.0 / HTML / Markdown / JUnit**, **modo
+> baseline** (solo hallazgos nuevos) y cache incremental. Ver [el roadmap](#roadmap).
 
 ## Instalación (desarrollo)
 
@@ -25,9 +25,12 @@ pip install -e ".[dev]"
 
 ```bash
 sastcore --version
-sastcore scan .                       # escanea en busca de secretos
-sastcore scan . --format json         # salida JSON
-sastcore scan . --fail-on HIGH        # exit 1 si hay hallazgos HIGH o superiores
+sastcore scan .                              # secretos + patrones + taint
+sastcore scan . --fail-on HIGH               # exit 1 si hay hallazgos HIGH o superiores
+sastcore scan . --format sarif -o out.sarif  # SARIF 2.1.0 para GitHub Code Scanning
+sastcore scan . --format html -o report.html # informe HTML autocontenido
+sastcore baseline create . -o baseline.json  # snapshot de fingerprints
+sastcore scan . --baseline baseline.json     # solo hallazgos nuevos
 ```
 
 Códigos de salida (contrato estable para CI): `0` limpio · `1` hallazgos sobre el umbral ·
@@ -42,7 +45,7 @@ Códigos de salida (contrato estable para CI): `0` limpio · `1` hallazgos sobre
 | 2 | Parsing tree-sitter + motor de patrones (metavariables, elipsis) | ✅ hecha |
 | 3 | Rulepacks core (~31 reglas, OWASP Top 10) | ✅ hecha |
 | 4 | Taint analysis (CFG → DFG → propagación → summaries) | ✅ hecha |
-| 5 | Reporters (SARIF/HTML/MD/JUnit) + modo baseline/CI | ⚪ pendiente |
+| 5 | Reporters (SARIF/HTML/MD/JUnit) + modo baseline/CI | ✅ hecha |
 | 6 | Integraciones (GitHub Action, pre-commit, Docker) + DX | ⚪ pendiente |
 
 Lenguajes del MVP: **JavaScript, TypeScript, Python**.
