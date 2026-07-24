@@ -15,6 +15,7 @@ from sastcore import __version__
 from sastcore._logging import configure_logging
 from sastcore.engine.pattern.pass_ import default_pattern_pass
 from sastcore.engine.scheduler import Scheduler
+from sastcore.engine.taint.pass_ import default_taint_pass
 from sastcore.exit_codes import ExitCode
 from sastcore.findings.dedup import deduplicate
 from sastcore.findings.model import Finding, Severity, severity_rank
@@ -107,7 +108,7 @@ def scan(
     if baseline is not None:
         console.print("[yellow]--baseline aún no está implementado (llega en la Fase 5).[/yellow]")
 
-    scheduler = Scheduler(pattern_pass=default_pattern_pass())
+    scheduler = Scheduler(pattern_pass=default_pattern_pass(), taint_pass=default_taint_pass())
     findings: list[Finding] = []
     files_scanned = 0
     for target in targets:
