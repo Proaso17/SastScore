@@ -121,3 +121,8 @@ Taint (Fase 4, por ADR-0003):
   Markdown (PR) y JUnit XML; modo baseline (`baseline create` + `scan --baseline`, solo
   hallazgos nuevos); cache persistente cross-run por hash de contenido (ADR-0004); flags
   `--output`, `--baseline`, `--no-cache`.
+- **Fase 6 (completa):** integraciones y DX. Config `.sastcore.yml` (`config.py`) con
+  precedencia CLI &gt; fichero &gt; defaults (exclude, fail_on, format, min_confidence,
+  disabled_rules) y comando `sastcore init`; GitHub Action (`action.yml`) que produce SARIF;
+  hook de pre-commit (`.pre-commit-hooks.yaml`); imagen Docker slim (`Dockerfile`); guías
+  `docs/writing-rules.md` y `docs/ci-integration.md`. **MVP completo.**

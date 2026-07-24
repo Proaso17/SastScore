@@ -7,9 +7,10 @@ mapeada a **CWE** y **OWASP Top 10**. El objetivo es alta señal y baja tasa de 
 positivos, con salida **SARIF 2.1.0** nativa y **cero telemetría** (no hace llamadas de
 red durante el escaneo).
 
-> **Estado: Fase 5.** Discovery + secretos + patrones (~31 reglas) + **taint analysis**
-> (traza source→sink), con **reporters SARIF 2.1.0 / HTML / Markdown / JUnit**, **modo
-> baseline** (solo hallazgos nuevos) y cache incremental. Ver [el roadmap](#roadmap).
+> **Estado: MVP completo (Fase 6).** Discovery + secretos + patrones (36 reglas) + **taint
+> analysis** (traza source→sink), reporters SARIF/HTML/Markdown/JUnit, modo baseline y cache,
+> más **GitHub Action, hook de pre-commit, imagen Docker, `sastcore init`** y guía para
+> escribir reglas. Ver [el roadmap](#roadmap) y [docs/](docs/).
 
 ## Instalación (desarrollo)
 
@@ -25,6 +26,7 @@ pip install -e ".[dev]"
 
 ```bash
 sastcore --version
+sastcore init                                # genera .sastcore.yml
 sastcore scan .                              # secretos + patrones + taint
 sastcore scan . --fail-on HIGH               # exit 1 si hay hallazgos HIGH o superiores
 sastcore scan . --format sarif -o out.sarif  # SARIF 2.1.0 para GitHub Code Scanning
@@ -32,6 +34,9 @@ sastcore scan . --format html -o report.html # informe HTML autocontenido
 sastcore baseline create . -o baseline.json  # snapshot de fingerprints
 sastcore scan . --baseline baseline.json     # solo hallazgos nuevos
 ```
+
+**Más:** [guía para escribir reglas](docs/writing-rules.md) ·
+[integración en CI/CD (GitHub Action, Docker, pre-commit)](docs/ci-integration.md).
 
 Códigos de salida (contrato estable para CI): `0` limpio · `1` hallazgos sobre el umbral ·
 `2` error de ejecución.
@@ -46,7 +51,7 @@ Códigos de salida (contrato estable para CI): `0` limpio · `1` hallazgos sobre
 | 3 | Rulepacks core (~31 reglas, OWASP Top 10) | ✅ hecha |
 | 4 | Taint analysis (CFG → DFG → propagación → summaries) | ✅ hecha |
 | 5 | Reporters (SARIF/HTML/MD/JUnit) + modo baseline/CI | ✅ hecha |
-| 6 | Integraciones (GitHub Action, pre-commit, Docker) + DX | ⚪ pendiente |
+| 6 | Integraciones (GitHub Action, pre-commit, Docker) + DX | ✅ hecha |
 
 Lenguajes del MVP: **JavaScript, TypeScript, Python**.
 
