@@ -61,3 +61,19 @@
   tests:
     bad: tests/rules/fixtures/python/py.deser.yaml-unsafe-load_bad.py
     good: tests/rules/fixtures/python/py.deser.yaml-unsafe-load_good.py
+
+- id: py.deser.jsonpickle
+  languages: [python]
+  mode: pattern
+  severity: HIGH
+  confidence: MEDIUM
+  message: "jsonpickle.decode deserializa objetos arbitrarios de Python de forma insegura."
+  cwe: ["CWE-502"]
+  owasp: "A08:2021-Software and Data Integrity Failures"
+  pattern: "jsonpickle.decode($X)"
+  fix_suggestion: "Usa json.loads para datos no confiables; jsonpickle solo con datos propios."
+  references:
+    - https://cwe.mitre.org/data/definitions/502.html
+  tests:
+    bad: tests/rules/fixtures/python/py.deser.jsonpickle_bad.py
+    good: tests/rules/fixtures/python/py.deser.jsonpickle_good.py
