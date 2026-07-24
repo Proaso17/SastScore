@@ -1,0 +1,14 @@
+.venv/
+.git/
+.github/
+.sastcore-cache/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+tests/
+docs/
+*.pdf
+*.sarif
+.pre-commit-config.yaml

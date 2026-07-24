@@ -1,0 +1,7 @@
+- id: sastcore
+  name: sastcore SAST
+  description: "Análisis estático de seguridad con sastcore sobre los ficheros modificados."
+  entry: sastcore scan --fail-on HIGH
+  language: python
+  types: [text]
+  require_serial: true

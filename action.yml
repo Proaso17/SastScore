@@ -1,0 +1,48 @@
+name: "sastcore SAST"
+description: "Analiza el código con sastcore y genera un informe SARIF para Code Scanning."
+author: "sastcore"
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  path:
+    description: "Ruta a escanear."
+    required: false
+    default: "."
+  output:
+    description: "Fichero SARIF de salida."
+    required: false
+    default: "sastcore.sarif"
+  fail-on:
+    description: "Severidad mínima que hace fallar el paso (CRITICAL/HIGH/MEDIUM/LOW/INFO; vacío = no fallar)."
+    required: false
+    default: ""
+  baseline:
+    description: "Fichero de baseline (opcional): solo se reportan hallazgos nuevos."
+    required: false
+    default: ""
+
+outputs:
+  sarif:
+    description: "Ruta del SARIF generado."
+    value: ${{ inputs.output }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install sastcore
+      shell: bash
+      # Publicado en PyPI: pip install sastcore. Mientras tanto, instalar desde el repo.
+      run: pip install sastcore
+    - name: Run sastcore
+      shell: bash
+      run: |
+        args=(scan "${{ inputs.path }}" --format sarif --output "${{ inputs.output }}")
+        if [ -n "${{ inputs.fail-on }}" ]; then args+=(--fail-on "${{ inputs.fail-on }}"); fi
+        if [ -n "${{ inputs.baseline }}" ]; then args+=(--baseline "${{ inputs.baseline }}"); fi
+        sastcore "${args[@]}"
