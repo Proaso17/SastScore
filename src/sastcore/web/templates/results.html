@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>sastcore — resultados</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>sastcore</h1>
+      <span class="tag">Resultados del análisis</span>
+    </div>
+  </header>
+  <main class="wrap">
+    <div class="summary">
+      <a href="/" class="back">← Nuevo análisis</a>
+      <div class="counts">
+        {% for sev in severity_order %}{% if counts[sev] %}<span class="badge {{ sev }}">{{ counts[sev] }} {{ sev }}</span>{% endif %}{% endfor %}
+      </div>
+    </div>
+    <p class="muted">{{ findings|length }} hallazgo(s) · {{ files_scanned }} fichero(s) analizado(s).</p>
+
+    {% if not findings %}
+      <div class="ok">✓ No se han detectado vulnerabilidades.</div>
+    {% else %}
+      {% for f in findings %}
+      <article class="finding">
+        <div class="fh">
+          <span class="badge {{ f.severity }}">{{ f.severity }}</span>
+          <code class="rid">{{ f.rule_id }}</code>
+          <span class="loc">{{ f.location.path }}:{{ f.location.start_line }}</span>
+        </div>
+        <p class="msg">{{ f.message }}</p>
+        <pre>{{ f.snippet }}</pre>
+        {% if f.data_flow %}
+        <ul class="flow">
+          {% for s in f.data_flow %}
+          <li><code>{{ s.location.path }}:{{ s.location.start_line }}</code> — {{ s.message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if f.fix_suggestion %}<p class="fix">💡 {{ f.fix_suggestion }}</p>{% endif %}
+        {% if f.cwe %}<div class="meta">{{ f.cwe|join(', ') }}{% if f.owasp %} · {{ f.owasp }}{% endif %}</div>{% endif %}
+      </article>
+      {% endfor %}
+    {% endif %}
+  </main>
+  <footer class="wrap muted">sastcore v{{ version }} — el código subido no se almacena.</footer>
+</body>
+</html>

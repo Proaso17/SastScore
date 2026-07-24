@@ -259,6 +259,21 @@ def rules_list() -> None:
 
 
 @app.command()
+def serve(
+    host: Annotated[str, typer.Option(help="Host de escucha.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Puerto.")] = 8000,
+) -> None:
+    """Arranca la aplicación web (requiere el extra: pip install 'sastcore[web]')."""
+    try:
+        import uvicorn
+    except ImportError as exc:
+        console.print("[red]Falta el extra web.[/red] Instala con: pip install 'sastcore[web]'")
+        raise typer.Exit(ExitCode.ERROR) from exc
+    console.print(f"sastcore web en [bold]http://{host}:{port}[/bold] (Ctrl+C para parar)")
+    uvicorn.run("sastcore.web.app:app", host=host, port=port)
+
+
+@app.command()
 def version() -> None:
     """Muestra la versión de sastcore."""
     console.print(f"sastcore {__version__}")

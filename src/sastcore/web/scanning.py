@@ -1,0 +1,131 @@
+"""Preparación segura de la subida y ejecución aislada del escaneo.
+
+Cada escaneo se ejecuta en un **subproceso** (la CLI ``sastcore scan``): así el servidor
+de larga vida no acumula objetos de tree-sitter (que forman ciclos y obligan a desactivar
+el GC), y un fallo del análisis queda contenido en su propio proceso.
+
+La extracción del zip está endurecida contra *zip-slip* (rutas fuera del destino),
+*zip-bomb* (límite de tamaño descomprimido y nº de ficheros) y symlinks.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import stat
+import subprocess
+import sys
+import tempfile
+import zipfile
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_UNCOMPRESSED_BYTES = 300 * 1024 * 1024
+MAX_FILES = 20_000
+SCAN_TIMEOUT_S = 180
+_CHUNK = 1 << 16
+
+
+class UploadError(ValueError):
+    """Subida inválida (zip inseguro, demasiado grande, formato incorrecto)."""
+
+
+@dataclass
+class ScanReport:
+    """Resultado del escaneo de una subida."""
+
+    files_scanned: int
+    findings: list[dict[str, Any]]
+
+
+def _is_symlink(info: zipfile.ZipInfo) -> bool:
+    return stat.S_ISLNK(info.external_attr >> 16)
+
+
+def _safe_target(dest: Path, name: str) -> Path:
+    """Resuelve el destino garantizando que queda dentro de ``dest`` (anti zip-slip)."""
+    target = (dest / name).resolve()
+    if target != dest and dest not in target.parents:
+        raise UploadError(f"ruta insegura en el zip: {name!r}")
+    return target
+
+
+def extract_zip(data: bytes, dest: Path) -> None:
+    """Extrae ``data`` (bytes de un zip) bajo ``dest`` de forma segura."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as exc:
+        raise UploadError("el fichero no es un zip válido") from exc
+
+    written = 0
+    count = 0
+    with archive:
+        for info in archive.infolist():
+            if info.is_dir() or _is_symlink(info):
+                continue
+            count += 1
+            if count > MAX_FILES:
+                raise UploadError("el zip contiene demasiados ficheros")
+            target = _safe_target(dest, info.filename)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(info) as src, target.open("wb") as out:
+                while chunk := src.read(_CHUNK):
+                    written += len(chunk)
+                    if written > MAX_UNCOMPRESSED_BYTES:
+                        raise UploadError("el zip descomprimido excede el límite")
+                    out.write(chunk)
+
+
+def _write_plain_file(dest: Path, filename: str, data: bytes) -> None:
+    safe = Path(filename).name or "upload.txt"
+    (dest / safe).write_bytes(data)
+
+
+def scan_directory(root: Path) -> ScanReport:
+    """Escanea ``root`` invocando la CLI en un subproceso aislado."""
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "sastcore",
+            "scan",
+            str(root),
+            "--format",
+            "json",
+            "--no-cache",
+            "--no-config",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=SCAN_TIMEOUT_S,
+        check=False,
+    )
+    if proc.returncode not in (0, 1):
+        raise UploadError(f"error al escanear: {proc.stderr.strip()[:300]}")
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise UploadError("la salida del escaneo no es válida") from exc
+    return ScanReport(
+        files_scanned=int(payload.get("files_scanned", 0)),
+        findings=list(payload.get("findings", [])),
+    )
+
+
+def prepare_and_scan(uploads: list[tuple[str, bytes]]) -> ScanReport:
+    """Prepara un espacio de trabajo temporal desde la subida y lo escanea."""
+    if not uploads:
+        raise UploadError("no se subió ningún fichero")
+    if sum(len(data) for _, data in uploads) > MAX_UPLOAD_BYTES:
+        raise UploadError("la subida excede el tamaño máximo (50 MB)")
+
+    with tempfile.TemporaryDirectory(prefix="sastcore_web_") as tmp:
+        dest = Path(tmp).resolve()
+        for filename, data in uploads:
+            if filename.lower().endswith(".zip"):
+                extract_zip(data, dest)
+            else:
+                _write_plain_file(dest, filename, data)
+        return scan_directory(dest)

@@ -7,10 +7,10 @@ mapeada a **CWE** y **OWASP Top 10**. El objetivo es alta señal y baja tasa de 
 positivos, con salida **SARIF 2.1.0** nativa y **cero telemetría** (no hace llamadas de
 red durante el escaneo).
 
-> **Estado: MVP completo (Fase 6).** Discovery + secretos + patrones (36 reglas) + **taint
-> analysis** (traza source→sink), reporters SARIF/HTML/Markdown/JUnit, modo baseline y cache,
-> más **GitHub Action, hook de pre-commit, imagen Docker, `sastcore init`** y guía para
-> escribir reglas. Ver [el roadmap](#roadmap) y [docs/](docs/).
+> **Estado: MVP completo + aplicación web.** Discovery + secretos + patrones (36 reglas) +
+> **taint analysis** (traza source→sink), reporters SARIF/HTML/Markdown/JUnit, modo baseline
+> y cache, más GitHub Action, pre-commit, Docker, `sastcore init` y una **app web** donde el
+> usuario sube su repo y ve las vulnerabilidades. Ver [el roadmap](#roadmap) y [docs/](docs/).
 
 ## Instalación (desarrollo)
 
@@ -34,6 +34,17 @@ sastcore scan . --format html -o report.html # informe HTML autocontenido
 sastcore baseline create . -o baseline.json  # snapshot de fingerprints
 sastcore scan . --baseline baseline.json     # solo hallazgos nuevos
 ```
+
+### Aplicación web
+
+```bash
+pip install -e ".[web]"     # instala FastAPI/uvicorn
+sastcore serve              # http://127.0.0.1:8000
+```
+
+Sube el `.zip` de tu repositorio (o ficheros sueltos) desde el navegador y obtén las
+vulnerabilidades con su traza. El código se analiza en un subproceso aislado, no se
+ejecuta y no se almacena. También expone `POST /api/scan` (JSON) para integraciones.
 
 **Más:** [guía para escribir reglas](docs/writing-rules.md) ·
 [integración en CI/CD (GitHub Action, Docker, pre-commit)](docs/ci-integration.md).

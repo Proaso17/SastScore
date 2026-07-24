@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>sastcore — análisis de seguridad</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>sastcore</h1>
+      <span class="tag">Análisis estático de seguridad</span>
+    </div>
+  </header>
+  <main class="wrap">
+    {% if error %}<div class="alert">⚠ {{ error }}</div>{% endif %}
+    <section class="card">
+      <h2>Analiza tu código</h2>
+      <p class="muted">
+        Sube el <b>.zip</b> de tu repositorio o ficheros sueltos (<code>.py</code>,
+        <code>.js</code>, <code>.ts</code>). Detectamos inyección, XSS, deserialización
+        insegura, criptografía débil y secretos. El código <b>no se ejecuta</b>: solo se
+        analiza, y no se almacena.
+      </p>
+      <form action="/scan" method="post" enctype="multipart/form-data">
+        <label class="drop">
+          <input type="file" name="files" multiple>
+          <span>Selecciona un .zip o varios ficheros</span>
+        </label>
+        <button type="submit">Analizar</button>
+      </form>
+    </section>
+  </main>
+  <footer class="wrap muted">sastcore v{{ version }} — motor SAST open-core.</footer>
+</body>
+</html>
