@@ -1,0 +1,52 @@
+- id: js.taint.sql-injection
+  languages: [javascript, typescript]
+  mode: taint
+  severity: HIGH
+  confidence: HIGH
+  message: "Entrada no confiable alcanza una consulta SQL: inyección SQL."
+  cwe: ["CWE-89"]
+  owasp: "A03:2021-Injection"
+  sources:
+    - pattern: req.query
+    - pattern: req.body
+    - pattern: req.params
+    - pattern: req.cookies
+  sanitizers:
+    - pattern: escape($X)
+  sinks:
+    - pattern: $C.query($Q, ...)
+      taint_arg: 0
+    - pattern: $C.execute($Q, ...)
+      taint_arg: 0
+  fix_suggestion: "Usa consultas parametrizadas / prepared statements con placeholders."
+  references:
+    - https://cwe.mitre.org/data/definitions/89.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.taint.sql-injection_bad.js
+    good: tests/rules/fixtures/javascript/js.taint.sql-injection_good.js
+
+- id: js.taint.command-injection
+  languages: [javascript, typescript]
+  mode: taint
+  severity: CRITICAL
+  confidence: HIGH
+  message: "Entrada no confiable alcanza la ejecución de comandos del sistema."
+  cwe: ["CWE-78"]
+  owasp: "A03:2021-Injection"
+  sources:
+    - pattern: req.query
+    - pattern: req.body
+    - pattern: req.params
+  sinks:
+    - pattern: child_process.exec($X, ...)
+      taint_arg: 0
+    - pattern: child_process.execSync($X, ...)
+      taint_arg: 0
+    - pattern: cp.exec($X, ...)
+      taint_arg: 0
+  fix_suggestion: "Usa execFile/spawn con una lista de argumentos y sin shell."
+  references:
+    - https://cwe.mitre.org/data/definitions/78.html
+  tests:
+    bad: tests/rules/fixtures/javascript/js.taint.command-injection_bad.js
+    good: tests/rules/fixtures/javascript/js.taint.command-injection_good.js
