@@ -15,3 +15,9 @@ class Reporter(Protocol):
     """
 
     def render(self, findings: list[Finding], *, files_scanned: int) -> str | None: ...
+
+
+class TextReporter(Protocol):
+    """Reporter que devuelve el informe como texto (JSON, SARIF, HTML, Markdown, JUnit)."""
+
+    def render(self, findings: list[Finding], *, files_scanned: int) -> str: ...
