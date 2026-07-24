@@ -43,7 +43,7 @@ dev = [
 ]
 
 [project.scripts]
-sastcore = "sastcore.cli:app"
+sastcore = "sastcore.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/sastcore/sastcore"

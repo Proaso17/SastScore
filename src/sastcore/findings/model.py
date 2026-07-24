@@ -11,6 +11,7 @@ Convenciones de posición:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -57,8 +58,14 @@ def severity_rank(severity: Severity) -> int:
     return SEVERITY_ORDER.index(severity)
 
 
-class Location(BaseModel):
-    """Ubicación de un hallazgo en un fichero."""
+@dataclass(frozen=True, slots=True)
+class Location:
+    """Ubicación de un hallazgo en un fichero.
+
+    Es una dataclass (no un modelo pydantic) a propósito: el taint crea gran cantidad de
+    ``Location``/``DataFlowStep``, y crear/liberar tantos objetos pydantic-core corrompía
+    la memoria en algunas plataformas. pydantic v2 sigue serializándolas dentro de Finding.
+    """
 
     path: str
     start_line: int
@@ -67,7 +74,8 @@ class Location(BaseModel):
     end_col: int
 
 
-class DataFlowStep(BaseModel):
+@dataclass(frozen=True, slots=True)
+class DataFlowStep:
     """Un paso en la traza de flujo de datos de un hallazgo de taint."""
 
     location: Location
