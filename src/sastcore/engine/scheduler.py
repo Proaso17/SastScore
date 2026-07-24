@@ -17,6 +17,7 @@ from sastcore.discovery.walker import FileWalker
 from sastcore.engine.pattern.pass_ import PatternPass
 from sastcore.engine.secrets.pass_ import SecretsPass
 from sastcore.engine.taint.pass_ import TaintPass
+from sastcore.findings.cache import FindingsCache, content_hash
 from sastcore.findings.dedup import deduplicate
 from sastcore.findings.model import Finding
 from sastcore.parsing.cache import ParseCache
@@ -42,10 +43,12 @@ class Scheduler:
         secrets_pass: SecretsPass | None = None,
         pattern_pass: PatternPass | None = None,
         taint_pass: TaintPass | None = None,
+        cache: FindingsCache | None = None,
     ) -> None:
         self._secrets = secrets_pass if secrets_pass is not None else SecretsPass()
         self._pattern = pattern_pass
         self._taint = taint_pass
+        self._cache = cache
         self._parse_cache = ParseCache()
 
     def run(self, root: Path, *, walker: FileWalker | None = None) -> ScanResult:
@@ -71,6 +74,14 @@ class Scheduler:
             return []
 
         lines = content.splitlines()
+
+        digest = ""
+        if self._cache is not None:
+            digest = content_hash(content)
+            cached = self._cache.get(digest, rel_path)
+            if cached is not None:
+                return cached
+
         findings = self._secrets.scan_file(rel_path=rel_path, content=content)
 
         if self._pattern is not None or self._taint is not None:
@@ -93,4 +104,7 @@ class Scheduler:
                 except Exception as exc:  # pragma: no cover - robustez ante parseo
                     logger.debug("Fallo al analizar %s: %s", path, exc)
 
-        return apply_suppressions(findings, lines)
+        findings = apply_suppressions(findings, lines)
+        if self._cache is not None:
+            self._cache.put(digest, findings)
+        return findings
