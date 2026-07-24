@@ -2,51 +2,71 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>sastcore — resultados</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>sastcore · resultados</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header>
+  <header class="site-header">
     <div class="wrap">
-      <h1>sastcore</h1>
-      <span class="tag">Resultados del análisis</span>
+      <span class="brand">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        sastcore <span class="beta">SAST</span>
+      </span>
     </div>
   </header>
+
   <main class="wrap">
-    <div class="summary">
-      <a href="/" class="back">← Nuevo análisis</a>
-      <div class="counts">
-        {% for sev in severity_order %}{% if counts[sev] %}<span class="badge {{ sev }}">{{ counts[sev] }} {{ sev }}</span>{% endif %}{% endfor %}
-      </div>
+    <div class="results-head">
+      <a class="btn btn-ghost" href="/">← Nuevo análisis</a>
+      <h2>{% if findings %}Vulnerabilidades detectadas{% else %}Análisis completado{% endif %}</h2>
+      <span class="meta">{{ findings|length }} hallazgo(s) · {{ files_scanned }} fichero(s)</span>
     </div>
-    <p class="muted">{{ findings|length }} hallazgo(s) · {{ files_scanned }} fichero(s) analizado(s).</p>
 
     {% if not findings %}
-      <div class="ok">✓ No se han detectado vulnerabilidades.</div>
+      <div class="empty">
+        <h3>No se han detectado vulnerabilidades</h3>
+        <p>Analizamos {{ files_scanned }} fichero(s) y no encontramos problemas.</p>
+      </div>
     {% else %}
+      <div class="stats">
+        <div class="stat total"><div class="n">{{ findings|length }}</div><div class="l">Total</div></div>
+        {% for sev in severity_order %}
+        <div class="stat {{ sev }}{% if not counts[sev] %} dim{% endif %}"><div class="n">{{ counts[sev] }}</div><div class="l">{{ sev }}</div></div>
+        {% endfor %}
+      </div>
+
       {% for f in findings %}
-      <article class="finding">
-        <div class="fh">
+      <article class="finding {{ f.severity }}">
+        <div class="f-head">
           <span class="badge {{ f.severity }}">{{ f.severity }}</span>
-          <code class="rid">{{ f.rule_id }}</code>
-          <span class="loc">{{ f.location.path }}:{{ f.location.start_line }}</span>
+          <code class="f-rule">{{ f.rule_id }}</code>
+          <span class="f-loc">{{ f.location.path }}:{{ f.location.start_line }}</span>
         </div>
-        <p class="msg">{{ f.message }}</p>
-        <pre>{{ f.snippet }}</pre>
-        {% if f.data_flow %}
-        <ul class="flow">
-          {% for s in f.data_flow %}
-          <li><code>{{ s.location.path }}:{{ s.location.start_line }}</code> — {{ s.message }}</li>
-          {% endfor %}
-        </ul>
-        {% endif %}
-        {% if f.fix_suggestion %}<p class="fix">💡 {{ f.fix_suggestion }}</p>{% endif %}
-        {% if f.cwe %}<div class="meta">{{ f.cwe|join(', ') }}{% if f.owasp %} · {{ f.owasp }}{% endif %}</div>{% endif %}
+        <div class="f-body">
+          <p class="f-msg">{{ f.message }}</p>
+          <div class="code"><div class="ln"><span class="src">{{ f.snippet }}</span></div></div>
+          {% if f.data_flow %}
+          <div class="flow">
+            <div class="ttl">Flujo de datos</div>
+            <ol>{% for s in f.data_flow %}<li><code>{{ s.location.path }}:{{ s.location.start_line }}</code> — {{ s.message }}</li>{% endfor %}</ol>
+          </div>
+          {% endif %}
+          {% if f.fix_suggestion %}<div class="fix"><b>Cómo arreglarlo:</b> {{ f.fix_suggestion }}</div>{% endif %}
+          {% if f.cwe or f.owasp %}
+          <div class="tags">
+            {% for c in f.cwe %}<span class="tag">{{ c }}</span>{% endfor %}
+            {% if f.owasp %}<span class="tag">{{ f.owasp }}</span>{% endif %}
+          </div>
+          {% endif %}
+        </div>
       </article>
       {% endfor %}
     {% endif %}
   </main>
-  <footer class="wrap muted">sastcore v{{ version }} — el código subido no se almacena.</footer>
+
+  <footer class="site-footer">
+    <div class="wrap"><span>sastcore v{{ version }} · el código subido no se almacena.</span></div>
+  </footer>
 </body>
 </html>
