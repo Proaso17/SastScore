@@ -40,6 +40,7 @@ dependen de él, por eso se diseña contra el esquema **SARIF 2.1.0** desde el i
 | [0002](adr/0002-identidad-y-fingerprint.md) | Identidad de hallazgo estilo SARIF `partialFingerprints` | Aceptado |
 | [0003](adr/0003-precision-del-taint.md) | Taint flow-sensitive, path-insensitive | Aceptado |
 | [0004](adr/0004-estrategia-de-cache.md) | Cache parse-once en el run; persistente cross-run en la Fase 5 | Aceptado |
+| [0005](adr/0005-tree-sitter-gc-workaround.md) | Workaround del GC/ciclo de vida de tree-sitter (materialización + GC off + os._exit) | Aceptado |
 
 ## Requisitos no funcionales (objetivos)
 
@@ -86,6 +87,10 @@ Taint (Fase 4, por ADR-0003):
 - **Contenedores colapsados**: cualquier elemento tainted marca el contenedor entero.
 - Sin análisis **interprocedural entre ficheros** en el MVP (solo intra-fichero vía
   resúmenes de función).
+- **Plataforma:** por un bug del binding de tree-sitter (segfault del GC cíclico), el GC
+  cíclico se desactiva al parsear y el proceso sale con `os._exit` (ver [ADR-0005](adr/0005-tree-sitter-gc-workaround.md)).
+  Consecuencia: fuga acotada de objetos de tree-sitter por proceso (aceptable en una CLI
+  de ejecución corta).
 
 ## Estado por fase
 
@@ -104,3 +109,10 @@ Taint (Fase 4, por ADR-0003):
   `debug=True`), cada una con fixtures `bad`/`good`. Las reglas taint-dependientes
   (SQLi/XSS por asignación) van como `confidence: LOW` hasta la Fase 4. El matcher
   compara literales string ignorando el estilo de comillas.
+- **Fase 4 (completa):** taint analysis intraprocedural + salto interprocedural intra-fichero
+  (resúmenes param→retorno). Flujo dirigido por sintaxis: secuencia, `if` (unión en el join
+  → path-insensitive), bucles a fixpoint, `try/except`, desestructuración, contenedores
+  colapsados. Reutiliza el matcher para sources/sanitizers/sinks. Reglas `mode: taint`
+  (SQLi y command injection en py/js) con traza `data_flow` (source → asignaciones → sink).
+  Los 5 casos de la sección 8 verificados. Segfaults del binding tree-sitter resueltos
+  (ADR-0005).
