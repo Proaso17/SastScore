@@ -150,6 +150,41 @@ def test_request_id_header() -> None:
     assert propagated.headers["x-request-id"] == "trace-abc-123"
 
 
+def test_report_downloads_all_formats() -> None:
+    payload = _post_zip({"c.py": "import hashlib\nh = hashlib.md5(b'x')\n"}).json()
+    for fmt, ext in {
+        "sarif": ".sarif",
+        "json": ".json",
+        "markdown": ".md",
+        "html": ".html",
+    }.items():
+        response = client.post(f"/report/{fmt}", json=payload)
+        assert response.status_code == 200, fmt
+        disposition = response.headers["content-disposition"]
+        assert "attachment" in disposition
+        assert ext in disposition
+        assert "py.crypto.weak-hash-md5" in response.text
+
+
+def test_report_html_escapes_content() -> None:
+    payload = _post_zip({"c.py": "import hashlib\nh = hashlib.md5(b'x')\n"}).json()
+    payload["findings"][0]["message"] = "<script>alert(1)</script>"
+    response = client.post("/report/html", json=payload)
+    assert response.status_code == 200
+    assert "<script>alert(1)</script>" not in response.text
+    assert "&lt;script&gt;" in response.text
+
+
+def test_report_unknown_format_rejected() -> None:
+    response = client.post("/report/pdf", json={"files_scanned": 0, "findings": []})
+    assert response.status_code == 400
+
+
+def test_report_invalid_findings_rejected() -> None:
+    response = client.post("/report/json", json={"files_scanned": 0, "findings": [{"nope": 1}]})
+    assert response.status_code == 400
+
+
 def test_rate_limiter_trips(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app_mod, "RATE_LIMIT_PER_MIN", 3)
     app_mod._rate_hits.clear()

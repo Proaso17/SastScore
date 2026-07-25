@@ -14,14 +14,21 @@ import uuid
 from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field, ValidationError
 
 from sastcore import __version__
+from sastcore.findings.model import Finding
+from sastcore.reporters.base import TextReporter
+from sastcore.reporters.html import HTMLReporter
+from sastcore.reporters.json_ import JSONReporter
+from sastcore.reporters.markdown import MarkdownReporter
+from sastcore.reporters.sarif import SARIFReporter
 from sastcore.web.scanning import (
     MAX_FILES,
     MAX_UPLOAD_BYTES,
@@ -65,6 +72,22 @@ _rate_hits: dict[str, deque[float]] = {}
 
 _SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 _SCAN_PATHS = frozenset({"/scan", "/api/scan"})
+
+# Descarga de informes: formato -> (reporter, media-type, nombre de fichero).
+_REPORTERS: dict[str, tuple[TextReporter, str, str]] = {
+    "json": (JSONReporter(), "application/json", "sastcore-report.json"),
+    "sarif": (SARIFReporter(), "application/json", "sastcore-report.sarif"),
+    "markdown": (MarkdownReporter(), "text/markdown; charset=utf-8", "sastcore-report.md"),
+    "html": (HTMLReporter(), "text/html; charset=utf-8", "sastcore-report.html"),
+}
+
+
+class ReportRequest(BaseModel):
+    """Cuerpo de /report: los hallazgos que el navegador ya tiene, para reformatearlos."""
+
+    files_scanned: int = 0
+    findings: list[dict[str, Any]] = Field(default_factory=list)
+
 
 # Cabeceras de seguridad. La app es autocontenida (sin CDN), así que la CSP puede
 # ser estricta: solo scripts/imágenes del propio origen.
@@ -143,11 +166,23 @@ def _with_security_headers(response: Response, request: Request) -> Response:
     return response
 
 
+def _wants_json(request: Request) -> bool:
+    return request.url.path == "/api/scan" or request.url.path.startswith("/report/")
+
+
 def _error_response(request: Request, status_code: int, message: str) -> Response:
-    """JSON para /api/scan, texto plano para el resto."""
-    if request.url.path == "/api/scan":
+    """JSON para los endpoints de API, texto plano para el resto."""
+    if _wants_json(request):
         return JSONResponse({"error": message}, status_code=status_code)
     return PlainTextResponse(message, status_code=status_code)
+
+
+def _is_guarded_post(request: Request) -> bool:
+    """POST con cuerpo que limitamos por tamaño y frecuencia (scan + report)."""
+    if request.method != "POST":
+        return False
+    path = request.url.path
+    return path in _SCAN_PATHS or path.startswith("/report/")
 
 
 def _declared_length_exceeds(request: Request) -> bool:
@@ -159,7 +194,7 @@ def _declared_length_exceeds(request: Request) -> bool:
 async def _dispatch(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
-    if request.method == "POST" and request.url.path in _SCAN_PATHS:
+    if _is_guarded_post(request):
         if _declared_length_exceeds(request):
             limit_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
             return _error_response(request, 413, f"La subida excede el máximo ({limit_mb} MB).")
@@ -243,6 +278,25 @@ async def api_scan(files: Annotated[list[UploadFile], File()]) -> JSONResponse:
     except UploadError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     return JSONResponse({"files_scanned": report.files_scanned, "findings": report.findings})
+
+
+@app.post("/report/{fmt}")
+async def download_report(fmt: str, payload: ReportRequest) -> Response:
+    """Reformatea (sin estado) los hallazgos que envía el navegador a un formato descargable."""
+    entry = _REPORTERS.get(fmt)
+    if entry is None:
+        return JSONResponse({"error": "formato de informe no soportado"}, status_code=400)
+    reporter, media_type, filename = entry
+    try:
+        findings = [Finding.model_validate(item) for item in payload.findings]
+    except ValidationError:
+        return JSONResponse({"error": "datos de hallazgos inválidos"}, status_code=400)
+    text = reporter.render(findings, files_scanned=payload.files_scanned)
+    return Response(
+        content=text,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/health")

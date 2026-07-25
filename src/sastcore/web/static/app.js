@@ -120,6 +120,28 @@
     }
   });
 
+  // ── Ejemplo de demostración ─────────────────────────────────────────────
+  const sampleBtn = $("#sample-btn");
+  const SAMPLE = [
+    "import hashlib, os",
+    "",
+    "def login(request, cursor):",
+    "    user = request.args.get('user')",
+    "    cursor.execute(\"SELECT * FROM users WHERE name = '\" + user + \"'\")",
+    "    os.system('echo ' + user)",
+    "    return hashlib.md5(user.encode()).hexdigest()",
+    "",
+    "API_KEY = 'AKIAIOSFODNN7EXAMPLE'",
+    "",
+  ].join("\n");
+  if (sampleBtn) {
+    sampleBtn.addEventListener("click", () => {
+      files = [new File([SAMPLE], "ejemplo.py", { type: "text/x-python" })];
+      renderFiles();
+      form.requestSubmit();
+    });
+  }
+
   // ── Render de resultados ────────────────────────────────────────────────
   function severityCounts() {
     const c = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
@@ -144,6 +166,7 @@
     stats.appendChild(statCard("total", findings.length, "Total", false));
     SEV.forEach((s) => stats.appendChild(statCard(s, c[s], s, c[s] === 0)));
     resultsView.appendChild(stats);
+    resultsView.appendChild(downloadBar());
     resultsView.appendChild(toolbar(c));
     const list = el("div"); list.id = "findings-list";
     resultsView.appendChild(list);
@@ -154,6 +177,50 @@
     const d = el("div", `stat ${cls}${dim ? " dim" : ""}`);
     d.append(el("div", "n", String(n)), el("div", "l", label));
     return d;
+  }
+
+  // ── Descarga de informes ────────────────────────────────────────────────
+  const DL_FORMATS = [["sarif", "SARIF"], ["json", "JSON"], ["markdown", "Markdown"], ["html", "HTML"]];
+  const DL_EXT = { sarif: "sarif", json: "json", markdown: "md", html: "html" };
+
+  function downloadBar() {
+    const bar = el("div", "downloads");
+    bar.appendChild(el("span", "dl-label", "Descargar informe:"));
+    const status = el("span", "dl-status");
+    DL_FORMATS.forEach(([fmt, label]) => {
+      const b = el("button", "dl-btn", label);
+      b.type = "button";
+      b.addEventListener("click", () => downloadReport(fmt, b, status));
+      bar.appendChild(b);
+    });
+    bar.appendChild(status);
+    return bar;
+  }
+
+  async function downloadReport(fmt, btn, status) {
+    status.textContent = "";
+    btn.disabled = true;
+    try {
+      const res = await fetch("/report/" + fmt, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files_scanned: filesScanned, findings }),
+      });
+      if (!res.ok) { status.textContent = "No se pudo generar el informe."; return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = el("a");
+      a.href = url;
+      a.download = "sastcore-report." + (DL_EXT[fmt] || "txt");
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (_e) {
+      status.textContent = "No se pudo generar el informe.";
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   function toolbar(counts) {

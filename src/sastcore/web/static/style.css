@@ -228,3 +228,11 @@ main { padding: 44px 0 60px; }
 .legal li::before { content: "✓"; position: absolute; left: 0; top: -1px; color: var(--accent); font-weight: 800; }
 .legal ul.plain li::before { content: "•"; color: var(--muted); left: 5px; }
 .legal .btn-ghost { margin-top: 6px; }
+
+/* ── Barra de descarga de informes ──────────────────────────────────────── */
+.downloads { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin: 16px 0 2px; }
+.dl-label { color: var(--muted); font-size: 13px; font-weight: 600; }
+.dl-btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: var(--r-sm); padding: 6px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: .16s; }
+.dl-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.dl-btn:disabled { opacity: .55; cursor: default; }
+.dl-status { color: #e5484d; font-size: 12.5px; }
