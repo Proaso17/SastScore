@@ -97,15 +97,11 @@
     view.classList.remove("hidden");
   }
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!files.length) return;
+  async function performScan(url, opts) {
     alertEl.classList.add("hidden");
     show(loadingView);
-    const fd = new FormData();
-    for (const f of files) fd.append("files", f, f.name);
     try {
-      const res = await fetch("/api/scan", { method: "POST", body: fd });
+      const res = await fetch(url, opts);
       const data = await res.json();
       if (!res.ok) { show(uploadView); showAlert(data.error || "No se pudo analizar."); return; }
       findings = data.findings || [];
@@ -118,7 +114,34 @@
       show(uploadView);
       showAlert("No se pudo contactar con el servidor. Asegúrate de que está arrancado (ejecuta 'sastcore serve') y reintenta.");
     }
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!files.length) return;
+    const fd = new FormData();
+    for (const f of files) fd.append("files", f, f.name);
+    performScan("/api/scan", { method: "POST", body: fd });
   });
+
+  // ── Analizar un repo público de GitHub ──────────────────────────────────
+  const repoBtn = $("#repo-btn");
+  const repoUrl = $("#repo-url");
+  function scanRepo() {
+    const url = (repoUrl.value || "").trim();
+    if (!url) return;
+    performScan("/api/scan-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+  }
+  if (repoBtn && repoUrl) {
+    repoBtn.addEventListener("click", scanRepo);
+    repoUrl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); scanRepo(); }
+    });
+  }
 
   // ── Ejemplo de demostración ─────────────────────────────────────────────
   const sampleBtn = $("#sample-btn");

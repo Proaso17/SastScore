@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import subprocess
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -183,6 +184,52 @@ def test_report_unknown_format_rejected() -> None:
 def test_report_invalid_findings_rejected() -> None:
     response = client.post("/report/json", json={"files_scanned": 0, "findings": [{"nope": 1}]})
     assert response.status_code == 400
+
+
+def _make_tar(members: dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        for name, content in members.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(content)
+            tar.addfile(info, io.BytesIO(content))
+    return buffer.getvalue()
+
+
+def test_parse_github_url_valid() -> None:
+    assert scanning.parse_github_url("https://github.com/octocat/Hello-World") == (
+        "octocat",
+        "Hello-World",
+    )
+    assert scanning.parse_github_url("https://github.com/owner/repo.git") == ("owner", "repo")
+    assert scanning.parse_github_url("https://github.com/o/r/tree/main") == ("o", "r")
+
+
+def test_parse_github_url_rejects_non_github() -> None:
+    for bad in ("http://github.com/a/b", "https://evil.com/a/b", "https://github.com/only", "nope"):
+        with pytest.raises(scanning.UploadError):
+            scanning.parse_github_url(bad)
+
+
+def test_extract_tarball_rejects_path_traversal(tmp_path: Path) -> None:
+    data = _make_tar({"../evil.py": b"x = 1\n"})
+    with pytest.raises(scanning.UploadError):
+        scanning.extract_tarball(data, tmp_path)
+
+
+def test_scan_url_scans_downloaded_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    tar = _make_tar({"repo-main/app.py": b"import os\nos.system(cmd)\n"})
+    monkeypatch.setattr(scanning, "download_github_tarball", lambda owner, repo: tar)
+    response = client.post("/api/scan-url", json={"url": "https://github.com/octocat/repo"})
+    assert response.status_code == 200
+    ids = [f["rule_id"] for f in response.json()["findings"]]
+    assert "py.dangerous.os-system" in ids
+
+
+def test_scan_url_rejects_non_github() -> None:
+    response = client.post("/api/scan-url", json={"url": "https://evil.example.com/a/b"})
+    assert response.status_code == 400
+    assert "error" in response.json()
 
 
 def test_rate_limiter_trips(monkeypatch: pytest.MonkeyPatch) -> None:

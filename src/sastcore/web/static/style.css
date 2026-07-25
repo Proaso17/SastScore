@@ -236,3 +236,14 @@ main { padding: 44px 0 60px; }
 .dl-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .dl-btn:disabled { opacity: .55; cursor: default; }
 .dl-status { color: #e5484d; font-size: 12.5px; }
+
+/* ── Separador "o" + análisis por URL de repo ───────────────────────────── */
+.or-sep { display: flex; align-items: center; gap: 14px; color: var(--faint); font-size: 12.5px; margin: 22px 0; }
+.or-sep::before, .or-sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.url-card { padding: 16px; }
+.url-row { display: flex; gap: 10px; }
+.url-row input { flex: 1; min-width: 0; padding: 11px 13px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text); font-size: 14px; }
+.url-row input:focus { outline: none; border-color: var(--accent); }
+.url-row .btn { flex: none; white-space: nowrap; }
+.url-hint { display: block; margin-top: 8px; color: var(--faint); font-size: 12px; }
+@media (max-width: 560px) { .url-row { flex-direction: column; } }

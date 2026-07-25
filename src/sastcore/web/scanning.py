@@ -14,14 +14,19 @@ import io
 import json
 import logging
 import os
+import re
+import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +44,17 @@ MAX_UPLOAD_BYTES = _int_env("SASTCORE_MAX_UPLOAD_BYTES", 32 * 1024 * 1024)
 MAX_UNCOMPRESSED_BYTES = _int_env("SASTCORE_MAX_UNCOMPRESSED_BYTES", 200 * 1024 * 1024)
 MAX_FILES = _int_env("SASTCORE_MAX_FILES", 20_000)
 SCAN_TIMEOUT_S = _int_env("SASTCORE_SCAN_TIMEOUT_S", 180)
+# Descarga de repos de GitHub (tarball comprimido) por URL.
+MAX_DOWNLOAD_BYTES = _int_env("SASTCORE_MAX_DOWNLOAD_BYTES", 60 * 1024 * 1024)
+GITHUB_TIMEOUT_S = _int_env("SASTCORE_GITHUB_TIMEOUT_S", 30)
 _CHUNK = 1 << 16
+
+# Validación estricta: solo contactamos hosts de GitHub y la URL la construimos
+# nosotros a partir de owner/repo validados (no seguimos la URL cruda del usuario).
+_GITHUB_URL = re.compile(r"^https://github\.com/([^/\s]+)/([^/\s#?]+)")
+_GH_OWNER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
+_GH_REPO = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
+_GH_ALLOWED_HOSTS = frozenset({"github.com", "api.github.com", "codeload.github.com"})
 
 
 class UploadError(ValueError):
@@ -62,7 +77,7 @@ def _safe_target(dest: Path, name: str) -> Path:
     """Resuelve el destino garantizando que queda dentro de ``dest`` (anti zip-slip)."""
     target = (dest / name).resolve()
     if target != dest and dest not in target.parents:
-        raise UploadError(f"ruta insegura en el zip: {name!r}")
+        raise UploadError(f"ruta insegura en el archivo: {name!r}")
     return target
 
 
@@ -159,4 +174,88 @@ def prepare_and_scan(uploads: list[tuple[str, bytes]]) -> ScanReport:
                 extract_zip(data, dest)
             else:
                 _write_plain_file(dest, filename, data)
+        return scan_directory(dest)
+
+
+def parse_github_url(url: str) -> tuple[str, str]:
+    """Extrae ``(owner, repo)`` de una URL de GitHub, validándolos estrictamente."""
+    match = _GITHUB_URL.match(url.strip())
+    if not match:
+        raise UploadError("URL no válida. Usa https://github.com/owner/repo")
+    owner, repo = match.group(1), match.group(2)
+    if repo.endswith(".git"):
+        repo = repo[:-4]
+    if not _GH_OWNER.match(owner) or not _GH_REPO.match(repo):
+        raise UploadError("nombre de owner o repositorio no válido")
+    return owner, repo
+
+
+def download_github_tarball(owner: str, repo: str) -> bytes:
+    """Descarga el tarball de un repo público de GitHub (sin autenticación).
+
+    Solo se contactan hosts de GitHub; la URL la construimos nosotros a partir de
+    ``owner``/``repo`` ya validados, con límite de tamaño y timeout. Así no hay SSRF
+    hacia hosts arbitrarios ni por la URL cruda del usuario ni por redirecciones.
+    """
+    url = f"https://api.github.com/repos/{owner}/{repo}/tarball"
+    buffer = bytearray()
+    try:
+        with (
+            httpx.Client(
+                timeout=GITHUB_TIMEOUT_S,
+                follow_redirects=True,
+                headers={"User-Agent": "sastcore"},
+            ) as client,
+            client.stream("GET", url) as response,
+        ):
+            if response.url.host not in _GH_ALLOWED_HOSTS:
+                raise UploadError("destino de descarga no permitido")
+            if response.status_code == 404:
+                raise UploadError("repositorio no encontrado (¿es público?)")
+            if response.status_code != 200:
+                raise UploadError("no se pudo descargar el repositorio")
+            for chunk in response.iter_bytes(_CHUNK):
+                buffer.extend(chunk)
+                if len(buffer) > MAX_DOWNLOAD_BYTES:
+                    raise UploadError("el repositorio es demasiado grande")
+    except httpx.HTTPError as exc:
+        logger.warning("fallo al descargar %s/%s: %s", owner, repo, exc)
+        raise UploadError("no se pudo descargar el repositorio") from exc
+    return bytes(buffer)
+
+
+def extract_tarball(data: bytes, dest: Path) -> None:
+    """Extrae un ``tar.gz`` bajo ``dest`` de forma segura (solo ficheros regulares)."""
+    written = 0
+    count = 0
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+            for member in archive:
+                # Solo ficheros regulares: ignora dirs, symlinks, hardlinks y devices.
+                if not member.isreg():
+                    continue
+                count += 1
+                if count > MAX_FILES:
+                    raise UploadError("el repositorio contiene demasiados ficheros")
+                written += member.size
+                if written > MAX_UNCOMPRESSED_BYTES:
+                    raise UploadError("el repositorio descomprimido excede el límite")
+                target = _safe_target(dest, member.name)  # anti path-traversal
+                target.parent.mkdir(parents=True, exist_ok=True)
+                source = archive.extractfile(member)
+                if source is None:
+                    continue
+                with source, target.open("wb") as out:
+                    shutil.copyfileobj(source, out, _CHUNK)
+    except tarfile.TarError as exc:
+        raise UploadError("el archivo descargado no es un tar.gz válido") from exc
+
+
+def prepare_and_scan_from_github(url: str) -> ScanReport:
+    """Descarga un repo público de GitHub por URL y lo escanea."""
+    owner, repo = parse_github_url(url)
+    data = download_github_tarball(owner, repo)
+    with tempfile.TemporaryDirectory(prefix="sastcore_gh_") as tmp:
+        dest = Path(tmp).resolve()
+        extract_tarball(data, dest)
         return scan_directory(dest)

@@ -35,6 +35,7 @@ from sastcore.web.scanning import (
     ScanReport,
     UploadError,
     prepare_and_scan,
+    prepare_and_scan_from_github,
 )
 
 _HERE = Path(__file__).resolve().parent
@@ -71,7 +72,7 @@ _scan_semaphore = asyncio.Semaphore(MAX_CONCURRENT_SCANS)
 _rate_hits: dict[str, deque[float]] = {}
 
 _SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
-_SCAN_PATHS = frozenset({"/scan", "/api/scan"})
+_SCAN_PATHS = frozenset({"/scan", "/api/scan", "/api/scan-url"})
 
 # Descarga de informes: formato -> (reporter, media-type, nombre de fichero).
 _REPORTERS: dict[str, tuple[TextReporter, str, str]] = {
@@ -87,6 +88,12 @@ class ReportRequest(BaseModel):
 
     files_scanned: int = 0
     findings: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ScanUrlRequest(BaseModel):
+    """Cuerpo de /api/scan-url: la URL del repo público de GitHub a analizar."""
+
+    url: str
 
 
 # Cabeceras de seguridad. La app es autocontenida (sin CDN), así que la CSP puede
@@ -167,7 +174,8 @@ def _with_security_headers(response: Response, request: Request) -> Response:
 
 
 def _wants_json(request: Request) -> bool:
-    return request.url.path == "/api/scan" or request.url.path.startswith("/report/")
+    path = request.url.path
+    return path.startswith("/api/") or path.startswith("/report/")
 
 
 def _error_response(request: Request, status_code: int, message: str) -> Response:
@@ -227,6 +235,12 @@ async def _run_scan(uploads: list[tuple[str, bytes]]) -> ScanReport:
         return await asyncio.to_thread(prepare_and_scan, uploads)
 
 
+async def _run_scan_from_github(url: str) -> ScanReport:
+    """Descarga y escanea un repo de GitHub respetando el tope de concurrencia."""
+    async with _scan_semaphore:
+        return await asyncio.to_thread(prepare_and_scan_from_github, url)
+
+
 @app.get("/")
 async def index(request: Request) -> Response:
     return templates.TemplateResponse(
@@ -275,6 +289,15 @@ async def api_scan(files: Annotated[list[UploadFile], File()]) -> JSONResponse:
     try:
         uploads = await _collect(files)
         report = await _run_scan(uploads)
+    except UploadError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return JSONResponse({"files_scanned": report.files_scanned, "findings": report.findings})
+
+
+@app.post("/api/scan-url")
+async def api_scan_url(payload: ScanUrlRequest) -> JSONResponse:
+    try:
+        report = await _run_scan_from_github(payload.url)
     except UploadError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     return JSONResponse({"files_scanned": report.files_scanned, "findings": report.findings})
