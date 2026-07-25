@@ -208,3 +208,23 @@ main { padding: 44px 0 60px; }
 .hidden { display: none !important; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 @media (max-width: 560px) { .f-loc { margin-left: 0; width: 100%; } main { padding-top: 28px; } }
+
+/* ── Enlaces del footer + página legal ──────────────────────────────────── */
+.site-header .brand { text-decoration: none; color: var(--text); }
+.foot-links { display: flex; gap: 16px; align-items: center; }
+.foot-links a { color: var(--muted); text-decoration: none; }
+.foot-links a:hover { color: var(--text); }
+
+.legal { padding: 34px 0 12px; }
+.legal h1 { font-size: 26px; margin-bottom: 6px; }
+.legal .lead { color: var(--muted); margin-bottom: 26px; max-width: 640px; line-height: 1.55; }
+.legal section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 20px 22px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.legal h2 { font-size: 16px; margin-bottom: 13px; display: flex; align-items: center; gap: 9px; }
+.legal h2 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.legal p { margin-bottom: 10px; line-height: 1.6; }
+.legal p.muted { color: var(--muted); font-size: 13px; margin-bottom: 0; }
+.legal ul { margin: 2px 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.legal li { position: relative; padding-left: 24px; line-height: 1.55; }
+.legal li::before { content: "✓"; position: absolute; left: 0; top: -1px; color: var(--accent); font-weight: 800; }
+.legal ul.plain li::before { content: "•"; color: var(--muted); left: 5px; }
+.legal .btn-ghost { margin-top: 6px; }

@@ -127,6 +127,29 @@ def test_interactive_docs_disabled() -> None:
     assert client.get("/openapi.json").status_code == 404
 
 
+def test_legal_page() -> None:
+    response = client.get("/legal")
+    assert response.status_code == 200
+    body = response.text.lower()
+    assert "privacidad" in body
+    assert "no se ejecuta" in body
+    assert "no se almacena" in body
+    assert "migonagu@gmail.com" in response.text
+
+
+def test_footer_has_contact_and_legal_link() -> None:
+    body = client.get("/").text
+    assert 'href="/legal"' in body
+    assert "migonagu@gmail.com" in body
+
+
+def test_request_id_header() -> None:
+    generated = client.get("/health")
+    assert generated.headers.get("x-request-id")
+    propagated = client.get("/health", headers={"X-Request-ID": "trace-abc-123"})
+    assert propagated.headers["x-request-id"] == "trace-abc-123"
+
+
 def test_rate_limiter_trips(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app_mod, "RATE_LIMIT_PER_MIN", 3)
     app_mod._rate_hits.clear()

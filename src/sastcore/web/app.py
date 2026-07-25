@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+import uuid
 from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -155,19 +156,28 @@ def _declared_length_exceeds(request: Request) -> bool:
     return bool(declared and declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES)
 
 
-@app.middleware("http")
-async def _harden(
+async def _dispatch(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
     if request.method == "POST" and request.url.path in _SCAN_PATHS:
         if _declared_length_exceeds(request):
             limit_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
-            error = _error_response(request, 413, f"La subida excede el máximo ({limit_mb} MB).")
-            return _with_security_headers(error, request)
+            return _error_response(request, 413, f"La subida excede el máximo ({limit_mb} MB).")
         if _rate_limited(_client_ip(request)):
             message = "Demasiadas peticiones. Espera un momento y reinténtalo."
-            return _with_security_headers(_error_response(request, 429, message), request)
-    return _with_security_headers(await call_next(request), request)
+            return _error_response(request, 429, message)
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def _harden(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    # Id de petición para correlacionar logs/errores (se propaga si viene del cliente).
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+    response = await _dispatch(request, call_next)
+    response.headers.setdefault("X-Request-ID", request_id)
+    return _with_security_headers(response, request)
 
 
 async def _collect(files: list[UploadFile]) -> list[tuple[str, bytes]]:
@@ -186,6 +196,13 @@ async def _run_scan(uploads: list[tuple[str, bytes]]) -> ScanReport:
 async def index(request: Request) -> Response:
     return templates.TemplateResponse(
         request, "index.html", {"version": __version__, "asset_ver": ASSET_VER}
+    )
+
+
+@app.get("/legal")
+async def legal(request: Request) -> Response:
+    return templates.TemplateResponse(
+        request, "legal.html", {"version": __version__, "asset_ver": ASSET_VER}
     )
 
 

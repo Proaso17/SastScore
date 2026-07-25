@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>sastcore · privacidad y términos</title>
+  <meta name="description" content="Privacidad, alcance y términos de uso de sastcore: tu código no se ejecuta ni se almacena.">
+  <link rel="stylesheet" href="/static/style.css?v={{ asset_ver }}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="/">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        sastcore <span class="beta">SAST</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="wrap legal">
+    <h1>Privacidad y términos</h1>
+    <p class="lead">sastcore analiza tu código para encontrar vulnerabilidades. Esto es lo que
+      hacemos con él y lo que puedes esperar.</p>
+
+    <section>
+      <h2><span class="dot"></span>Privacidad de tu código</h2>
+      <ul>
+        <li><b>No se ejecuta:</b> tu código solo se analiza de forma estática (se parsea y se
+          buscan patrones). Nunca se ejecuta.</li>
+        <li><b>No se almacena:</b> se procesa en un espacio temporal aislado que se borra al
+          terminar la petición. No hay base de datos ni copias.</li>
+        <li><b>Sin telemetría:</b> no usamos cookies de analítica ni rastreadores, y no
+          compartimos datos con terceros.</li>
+        <li><b>Los informes</b> se generan en el momento; no se guardan en el servidor.</li>
+      </ul>
+      <p class="muted">Por seguridad y operación, el servidor puede registrar metadatos técnicos
+        de la petición (fecha, IP y código de respuesta) — <b>nunca el contenido de tu código</b>.</p>
+    </section>
+
+    <section>
+      <h2><span class="dot"></span>Alcance y limitaciones</h2>
+      <ul class="plain">
+        <li><b>Lenguajes:</b> JavaScript, TypeScript y Python.</li>
+        <li><b>Detecta:</b> inyección (SQL y comandos), XSS, deserialización insegura, criptografía
+          débil, secretos hardcodeados y flujos de datos peligrosos (taint), mapeados a CWE y OWASP.</li>
+        <li><b>Límite de subida:</b> hasta 32 MB por análisis.</li>
+        <li><b>No sustituye una auditoría profesional:</b> el análisis estático produce falsos
+          positivos y falsos negativos. Revisa los resultados con criterio.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="dot"></span>Términos de uso</h2>
+      <ul class="plain">
+        <li>El servicio se ofrece <b>«tal cual»</b>, sin garantías de ningún tipo. Lo usas bajo tu
+          responsabilidad.</li>
+        <li>Analiza solo código sobre el que tengas derecho a hacerlo.</li>
+        <li>No lo uses para atacar sistemas de terceros ni para abusar del servicio (aplican
+          límites de tamaño y frecuencia).</li>
+        <li>Motor <b>open-core</b> bajo licencia <b>Apache-2.0</b>.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2><span class="dot"></span>Contacto</h2>
+      <p>¿Dudas, un fallo o un falso positivo? Escríbenos a
+        <a href="mailto:migonagu@gmail.com">migonagu@gmail.com</a>.</p>
+    </section>
+
+    <a class="btn btn-ghost" href="/">← Volver al análisis</a>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>sastcore v{{ version }} · el código subido no se ejecuta ni se almacena.</span>
+      <span class="foot-links">
+        <a href="/legal">Privacidad y términos</a>
+        <a href="mailto:migonagu@gmail.com">Contacto</a>
+      </span>
+    </div>
+  </footer>
+</body>
+</html>
