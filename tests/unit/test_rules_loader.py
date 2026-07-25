@@ -23,6 +23,14 @@ def test_loads_default_rulepacks() -> None:
     assert all(isinstance(rule, Rule) for rule in rules)
 
 
+def test_every_rule_has_remediation() -> None:
+    """Ninguna regla debe cargarse sin una solución (texto + ejemplo de código)."""
+    rules = load_rulepacks(default_rulepacks_dir(), fixtures_root=_REPO_ROOT, require_fixtures=True)
+    for rule in rules:
+        assert rule.fix_suggestion, f"{rule.id} no tiene fix_suggestion"
+        assert rule.fix_example, f"{rule.id} no tiene fix_example"
+
+
 def test_rejects_rule_without_fixtures(tmp_path: Path) -> None:
     yml = tmp_path / "bad.yml"
     yml.write_text(

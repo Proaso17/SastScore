@@ -10,8 +10,11 @@
   owasp: "A03:2021-Injection"
   pattern: "os.system($X)"
   fix_suggestion: >-
-    Usa subprocess con una lista de argumentos y sin shell:
-    subprocess.run(["cmd", arg], check=True).
+    Usa subprocess con una lista de argumentos y sin shell: cada argumento va por
+    separado, así el sistema no interpreta metacaracteres del shell.
+  fix_example: |
+    import subprocess
+    subprocess.run(["ping", "-c", "1", host], check=True)
   references:
     - https://cwe.mitre.org/data/definitions/78.html
   tests:
@@ -29,7 +32,11 @@
   owasp: "A03:2021-Injection"
   pattern: "eval($X)"
   fix_suggestion: >-
-    Evita eval(). Para datos, usa ast.literal_eval; para lógica, un despacho explícito.
+    Evita eval(). Para leer datos usa ast.literal_eval; para elegir lógica, un
+    diccionario de despacho en vez de ejecutar texto.
+  fix_example: |
+    import ast
+    value = ast.literal_eval(user_input)   # solo literales, nunca código
   references:
     - https://cwe.mitre.org/data/definitions/95.html
   tests:
@@ -47,7 +54,10 @@
   cwe: ["CWE-502"]
   owasp: "A08:2021-Software and Data Integrity Failures"
   pattern: "yaml.load($X)"
-  fix_suggestion: "Usa yaml.safe_load($X) o yaml.load($X, Loader=yaml.SafeLoader)."
+  fix_suggestion: "Usa yaml.safe_load, que solo construye tipos básicos y no objetos arbitrarios."
+  fix_example: |
+    import yaml
+    data = yaml.safe_load(stream)
   references:
     - https://cwe.mitre.org/data/definitions/502.html
   tests:
@@ -63,7 +73,12 @@
   cwe: ["CWE-95"]
   owasp: "A03:2021-Injection"
   pattern: "exec($X)"
-  fix_suggestion: "Evita exec(); reestructura con un despacho explícito de funciones."
+  fix_suggestion: >-
+    Evita exec(). Sustitúyelo por un despacho explícito: mapea nombres permitidos a
+    funciones reales en lugar de ejecutar texto.
+  fix_example: |
+    ACTIONS = {"start": start, "stop": stop}
+    ACTIONS[name]()   # solo se ejecutan acciones conocidas
   references:
     - https://cwe.mitre.org/data/definitions/95.html
   tests:
@@ -78,7 +93,10 @@
   message: "tempfile.mktemp tiene una condición de carrera (TOCTOU); es inseguro."
   cwe: ["CWE-377"]
   pattern: "tempfile.mktemp(...)"
-  fix_suggestion: "Usa tempfile.mkstemp() o tempfile.NamedTemporaryFile()."
+  fix_suggestion: "Usa mkstemp/NamedTemporaryFile, que crean el fichero de forma atómica."
+  fix_example: |
+    import tempfile
+    fd, path = tempfile.mkstemp()
   references:
     - https://cwe.mitre.org/data/definitions/377.html
   tests:

@@ -12,6 +12,8 @@
   fix_suggestion: "Construye el DOM con textContent/createElement en vez de escribir HTML."
   references:
     - https://cwe.mitre.org/data/definitions/79.html
+  fix_example: |
+    el.textContent = userInput;   // texto, no HTML
   tests:
     bad: tests/rules/fixtures/javascript/js.xss.document-write_bad.js
     good: tests/rules/fixtures/javascript/js.xss.document-write_good.js
@@ -28,6 +30,8 @@
   fix_suggestion: "Usa textContent, o sanea el HTML con una librería como DOMPurify."
   references:
     - https://cwe.mitre.org/data/definitions/79.html
+  fix_example: |
+    el.textContent = userInput;   // o: el.innerHTML = DOMPurify.sanitize(html)
   tests:
     bad: tests/rules/fixtures/javascript/js.xss.inner-html_bad.js
     good: tests/rules/fixtures/javascript/js.xss.inner-html_good.js
@@ -44,6 +48,8 @@
   fix_suggestion: "Usa textContent, o sanea el HTML con una librería como DOMPurify."
   references:
     - https://cwe.mitre.org/data/definitions/79.html
+  fix_example: |
+    el.textContent = userInput;
   tests:
     bad: tests/rules/fixtures/javascript/js.xss.outer-html_bad.js
     good: tests/rules/fixtures/javascript/js.xss.outer-html_good.js
@@ -60,6 +66,8 @@
   fix_suggestion: "Usa insertAdjacentText, o sanea el HTML antes de insertarlo."
   references:
     - https://cwe.mitre.org/data/definitions/79.html
+  fix_example: |
+    el.insertAdjacentText("beforeend", userInput);
   tests:
     bad: tests/rules/fixtures/javascript/js.xss.insert-adjacent-html_bad.js
     good: tests/rules/fixtures/javascript/js.xss.insert-adjacent-html_good.js

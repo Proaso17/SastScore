@@ -10,6 +10,9 @@
   fix_suggestion: "No uses debug=True en producción; contrólalo con una variable de entorno."
   references:
     - https://cwe.mitre.org/data/definitions/489.html
+  fix_example: |
+    # Controla debug por entorno; nunca True en producción:
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1")
   tests:
     bad: tests/rules/fixtures/python/py.flask.debug-run_bad.py
     good: tests/rules/fixtures/python/py.flask.debug-run_good.py
@@ -28,6 +31,9 @@
   fix_suggestion: "Usa el ORM o consultas parametrizadas; nunca concatenes entrada del usuario."
   references:
     - https://cwe.mitre.org/data/definitions/89.html
+  fix_example: |
+    # Usa el ORM, o parámetros; nunca concatenar entrada:
+    User.objects.raw("SELECT * FROM users WHERE id = %s", [uid])
   tests:
     bad: tests/rules/fixtures/python/py.django.raw-sql_bad.py
     good: tests/rules/fixtures/python/py.django.raw-sql_good.py
@@ -46,6 +52,10 @@
   fix_suggestion: "Deja que el motor de plantillas autoescape; escapa explícitamente si hace falta."
   references:
     - https://cwe.mitre.org/data/definitions/79.html
+  fix_example: |
+    # Deja que la plantilla autoescape. Si escapas a mano:
+    from markupsafe import escape
+    html = escape(user_input)
   tests:
     bad: tests/rules/fixtures/python/py.xss.flask-markup_bad.py
     good: tests/rules/fixtures/python/py.xss.flask-markup_good.py

@@ -125,6 +125,7 @@ class TaintPass:
             owasp=rule.owasp,
             data_flow=taint_finding.data_flow,
             fix_suggestion=rule.fix_suggestion,
+            fix_example=rule.fix_example,
             references=list(rule.references),
             fingerprint=fingerprint,
         )

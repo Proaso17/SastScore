@@ -25,6 +25,12 @@ _REF_CWE798 = "https://cwe.mitre.org/data/definitions/798.html"
 _REF_CWE321 = "https://cwe.mitre.org/data/definitions/321.html"
 _REF_CWE312 = "https://cwe.mitre.org/data/definitions/312.html"
 
+_FIX_SECRET = (
+    "No dejes secretos en el código. Muévelo a una variable de entorno o a un gestor de "
+    "secretos (Vault, AWS Secrets Manager, etc.) y léelo en tiempo de ejecución. Si el "
+    "secreto ha estado en el repositorio, dalo por comprometido y RÓTALO."
+)
+
 
 @dataclass(frozen=True)
 class SecretDetector:
@@ -43,6 +49,8 @@ class SecretDetector:
     validate: Callable[[str], bool] | None = None
     """Validador de formato adicional sobre el valor capturado."""
     references: tuple[str, ...] = field(default_factory=tuple)
+    fix: str = _FIX_SECRET
+    """Cómo remediar el secreto (por defecto: sacarlo del código y rotarlo)."""
 
 
 def _looks_like_jwt(value: str) -> bool:

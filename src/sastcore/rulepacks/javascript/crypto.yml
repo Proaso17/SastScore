@@ -12,6 +12,8 @@
   fix_suggestion: "Usa sha256 o superior; para contraseñas, bcrypt/scrypt/argon2."
   references:
     - https://cwe.mitre.org/data/definitions/328.html
+  fix_example: |
+    const h = crypto.createHash("sha256");
   tests:
     bad: tests/rules/fixtures/javascript/js.crypto.weak-hash_bad.js
     good: tests/rules/fixtures/javascript/js.crypto.weak-hash_good.js
@@ -28,6 +30,9 @@
   fix_suggestion: "Usa crypto.createCipheriv con un IV aleatorio."
   references:
     - https://cwe.mitre.org/data/definitions/327.html
+  fix_example: |
+    const iv = crypto.randomBytes(16);
+    const c = crypto.createCipheriv("aes-256-cbc", key, iv);
   tests:
     bad: tests/rules/fixtures/javascript/js.crypto.create-cipher_bad.js
     good: tests/rules/fixtures/javascript/js.crypto.create-cipher_good.js

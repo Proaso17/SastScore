@@ -23,6 +23,9 @@
   fix_suggestion: "Usa consultas parametrizadas: cursor.execute('... WHERE id = %s', [id])."
   references:
     - https://cwe.mitre.org/data/definitions/89.html
+  fix_example: |
+    # Consulta parametrizada: el driver escapa el valor:
+    cursor.execute("SELECT * FROM users WHERE id = %s", [user_id])
   tests:
     bad: tests/rules/fixtures/python/py.taint.sql-injection_bad.py
     good: tests/rules/fixtures/python/py.taint.sql-injection_good.py
@@ -57,6 +60,9 @@
   fix_suggestion: "Evita el shell; pasa una lista de argumentos: subprocess.run(['cmd', arg])."
   references:
     - https://cwe.mitre.org/data/definitions/78.html
+  fix_example: |
+    import subprocess
+    subprocess.run(["ping", "-c", "1", host], check=True)   # lista, sin shell
   tests:
     bad: tests/rules/fixtures/python/py.taint.command-injection_bad.py
     good: tests/rules/fixtures/python/py.taint.command-injection_good.py

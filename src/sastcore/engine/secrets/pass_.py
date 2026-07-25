@@ -97,6 +97,7 @@ class SecretsPass:
                         snippet=_masked_snippet(lines, start_line, value),
                         engine=Engine.regex,
                         cwe=list(detector.cwe),
+                        fix_suggestion=detector.fix,
                         references=list(detector.references),
                         fingerprint=fingerprint,
                     )

@@ -15,6 +15,9 @@
   fix_suggestion: "Pasa una lista de argumentos y shell=False (por defecto)."
   references:
     - https://cwe.mitre.org/data/definitions/78.html
+  fix_example: |
+    import subprocess
+    subprocess.run(["ls", "-l", path], check=True)   # sin shell
   tests:
     bad: tests/rules/fixtures/python/py.injection.subprocess-shell-true_bad.py
     good: tests/rules/fixtures/python/py.injection.subprocess-shell-true_good.py
@@ -31,6 +34,9 @@
   fix_suggestion: "Usa subprocess con una lista de argumentos y sin shell."
   references:
     - https://cwe.mitre.org/data/definitions/78.html
+  fix_example: |
+    import subprocess
+    out = subprocess.run(["ls", path], capture_output=True, text=True).stdout
   tests:
     bad: tests/rules/fixtures/python/py.injection.os-popen_bad.py
     good: tests/rules/fixtures/python/py.injection.os-popen_good.py
@@ -49,6 +55,9 @@
   fix_suggestion: "Usa subprocess.run con una lista de argumentos y sin shell."
   references:
     - https://cwe.mitre.org/data/definitions/78.html
+  fix_example: |
+    import subprocess
+    out = subprocess.run(["ls", path], capture_output=True, text=True).stdout
   tests:
     bad: tests/rules/fixtures/python/py.injection.subprocess-getoutput_bad.py
     good: tests/rules/fixtures/python/py.injection.subprocess-getoutput_good.py

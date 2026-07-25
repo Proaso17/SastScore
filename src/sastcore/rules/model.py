@@ -63,6 +63,7 @@ class Rule(BaseModel):
     sanitizers: list[TaintSanitizer] = Field(default_factory=list)
     sinks: list[TaintSink] = Field(default_factory=list)
     fix_suggestion: str | None = None
+    fix_example: str | None = None
     references: list[str] = Field(default_factory=list)
     tests: RuleTests
 

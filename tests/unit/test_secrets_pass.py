@@ -71,3 +71,10 @@ def test_invalid_jwt_rejected() -> None:
 def test_plain_code_has_no_findings() -> None:
     content = "def add(a, b):\n    return a + b\n"
     assert SecretsPass().scan_file(rel_path="a.py", content=content) == []
+
+
+def test_secret_finding_has_remediation() -> None:
+    findings = SecretsPass().scan_file(rel_path="a.py", content='k = "AKIAIOSFODNN7EXAMPLE"\n')
+    finding = next(f for f in findings if f.rule_id == "secrets.aws.access-key-id")
+    assert finding.fix_suggestion
+    assert "rota" in finding.fix_suggestion.lower() or "entorno" in finding.fix_suggestion.lower()

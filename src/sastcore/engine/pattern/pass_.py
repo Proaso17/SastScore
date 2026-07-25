@@ -103,6 +103,7 @@ class PatternPass:
                             owasp=entry.rule.owasp,
                             data_flow=[],
                             fix_suggestion=entry.rule.fix_suggestion,
+                            fix_example=entry.rule.fix_example,
                             references=list(entry.rule.references),
                             fingerprint=fingerprint,
                         )

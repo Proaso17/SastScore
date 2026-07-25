@@ -105,6 +105,7 @@ class Finding(BaseModel):
     owasp: str | None = None
     data_flow: list[DataFlowStep] = Field(default_factory=list)
     fix_suggestion: str | None = None
+    fix_example: str | None = None
     references: list[str] = Field(default_factory=list)
     fingerprint: str = ""
 

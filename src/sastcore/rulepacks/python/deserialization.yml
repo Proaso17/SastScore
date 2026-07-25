@@ -10,6 +10,9 @@
   fix_suggestion: "Usa un formato seguro (json) o valida/firmar el origen de los datos."
   references:
     - https://cwe.mitre.org/data/definitions/502.html
+  fix_example: |
+    import json
+    obj = json.load(f)   # formato seguro para datos no confiables
   tests:
     bad: tests/rules/fixtures/python/py.deser.pickle-load_bad.py
     good: tests/rules/fixtures/python/py.deser.pickle-load_good.py
@@ -26,6 +29,9 @@
   fix_suggestion: "Usa un formato seguro (json) o valida/firmar el origen de los datos."
   references:
     - https://cwe.mitre.org/data/definitions/502.html
+  fix_example: |
+    import json
+    obj = json.loads(data)
   tests:
     bad: tests/rules/fixtures/python/py.deser.pickle-loads_bad.py
     good: tests/rules/fixtures/python/py.deser.pickle-loads_good.py
@@ -42,6 +48,9 @@
   fix_suggestion: "No deserialices datos no confiables con marshal; usa json."
   references:
     - https://cwe.mitre.org/data/definitions/502.html
+  fix_example: |
+    import json
+    obj = json.loads(data)
   tests:
     bad: tests/rules/fixtures/python/py.deser.marshal-loads_bad.py
     good: tests/rules/fixtures/python/py.deser.marshal-loads_good.py
@@ -58,6 +67,9 @@
   fix_suggestion: "Usa yaml.safe_load."
   references:
     - https://cwe.mitre.org/data/definitions/502.html
+  fix_example: |
+    import yaml
+    obj = yaml.safe_load(data)
   tests:
     bad: tests/rules/fixtures/python/py.deser.yaml-unsafe-load_bad.py
     good: tests/rules/fixtures/python/py.deser.yaml-unsafe-load_good.py
@@ -74,6 +86,9 @@
   fix_suggestion: "Usa json.loads para datos no confiables; jsonpickle solo con datos propios."
   references:
     - https://cwe.mitre.org/data/definitions/502.html
+  fix_example: |
+    import json
+    obj = json.loads(data)
   tests:
     bad: tests/rules/fixtures/python/py.deser.jsonpickle_bad.py
     good: tests/rules/fixtures/python/py.deser.jsonpickle_good.py

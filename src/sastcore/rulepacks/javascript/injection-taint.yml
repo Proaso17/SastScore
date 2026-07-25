@@ -21,6 +21,9 @@
   fix_suggestion: "Usa consultas parametrizadas / prepared statements con placeholders."
   references:
     - https://cwe.mitre.org/data/definitions/89.html
+  fix_example: |
+    // Consulta parametrizada con placeholders:
+    conn.query("SELECT * FROM users WHERE id = ?", [id]);
   tests:
     bad: tests/rules/fixtures/javascript/js.taint.sql-injection_bad.js
     good: tests/rules/fixtures/javascript/js.taint.sql-injection_good.js
@@ -47,6 +50,9 @@
   fix_suggestion: "Usa execFile/spawn con una lista de argumentos y sin shell."
   references:
     - https://cwe.mitre.org/data/definitions/78.html
+  fix_example: |
+    const { execFile } = require("child_process");
+    execFile("ping", ["-c", "1", host]);   // sin shell
   tests:
     bad: tests/rules/fixtures/javascript/js.taint.command-injection_bad.js
     good: tests/rules/fixtures/javascript/js.taint.command-injection_good.js

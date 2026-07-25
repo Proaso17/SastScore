@@ -11,6 +11,8 @@
   fix_suggestion: "Evita eval(). Usa JSON.parse para datos o una tabla de despacho para lógica."
   references:
     - https://cwe.mitre.org/data/definitions/95.html
+  fix_example: |
+    const data = JSON.parse(userInput);   // para datos; nunca eval
   tests:
     bad: tests/rules/fixtures/javascript/js.dangerous.eval_bad.js
     good: tests/rules/fixtures/javascript/js.dangerous.eval_good.js
@@ -32,6 +34,9 @@
     Usa execFile o spawn con una lista de argumentos y sin shell.
   references:
     - https://cwe.mitre.org/data/definitions/78.html
+  fix_example: |
+    const { execFile } = require("child_process");
+    execFile("ls", ["-l", dir]);   // sin shell
   tests:
     bad: tests/rules/fixtures/javascript/js.dangerous.child-process-exec_bad.js
     good: tests/rules/fixtures/javascript/js.dangerous.child-process-exec_good.js
@@ -50,6 +55,9 @@
   fix_suggestion: "Usa execFileSync o spawnSync con una lista de argumentos y sin shell."
   references:
     - https://cwe.mitre.org/data/definitions/78.html
+  fix_example: |
+    const { execFileSync } = require("child_process");
+    execFileSync("ls", ["-l", dir]);
   tests:
     bad: tests/rules/fixtures/javascript/js.dangerous.child-process-exec-sync_bad.js
     good: tests/rules/fixtures/javascript/js.dangerous.child-process-exec-sync_good.js
@@ -66,6 +74,10 @@
   fix_suggestion: "Evita construir funciones desde cadenas; usa una tabla de despacho."
   references:
     - https://cwe.mitre.org/data/definitions/95.html
+  fix_example: |
+    // Usa una tabla de despacho en vez de compilar texto:
+    const ops = { sum: (a, b) => a + b };
+    ops[name](x, y);
   tests:
     bad: tests/rules/fixtures/javascript/js.dangerous.new-function_bad.js
     good: tests/rules/fixtures/javascript/js.dangerous.new-function_good.js
@@ -84,6 +96,9 @@
   fix_suggestion: "No ejecutes código no confiable; si es imprescindible, aísla con un sandbox real."
   references:
     - https://cwe.mitre.org/data/definitions/95.html
+  fix_example: |
+    // No ejecutes código no confiable. Si es imprescindible, usa un sandbox
+    // real (p. ej. isolated-vm) con límites de tiempo y memoria.
   tests:
     bad: tests/rules/fixtures/javascript/js.dangerous.vm-run_bad.js
     good: tests/rules/fixtures/javascript/js.dangerous.vm-run_good.js

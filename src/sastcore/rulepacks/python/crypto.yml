@@ -10,6 +10,9 @@
   fix_suggestion: "Usa hashlib.sha256 o superior; para contraseñas, bcrypt/argon2."
   references:
     - https://cwe.mitre.org/data/definitions/328.html
+  fix_example: |
+    import hashlib
+    digest = hashlib.sha256(data).hexdigest()
   tests:
     bad: tests/rules/fixtures/python/py.crypto.weak-hash-md5_bad.py
     good: tests/rules/fixtures/python/py.crypto.weak-hash-md5_good.py
@@ -26,6 +29,9 @@
   fix_suggestion: "Usa hashlib.sha256 o superior."
   references:
     - https://cwe.mitre.org/data/definitions/328.html
+  fix_example: |
+    import hashlib
+    digest = hashlib.sha256(data).hexdigest()
   tests:
     bad: tests/rules/fixtures/python/py.crypto.weak-hash-sha1_bad.py
     good: tests/rules/fixtures/python/py.crypto.weak-hash-sha1_good.py
@@ -44,6 +50,8 @@
   fix_suggestion: "Usa un algoritmo moderno: hashlib.new(\"sha256\", ...)."
   references:
     - https://cwe.mitre.org/data/definitions/328.html
+  fix_example: |
+    digest = hashlib.new("sha256", data)
   tests:
     bad: tests/rules/fixtures/python/py.crypto.weak-hash-new_bad.py
     good: tests/rules/fixtures/python/py.crypto.weak-hash-new_good.py
@@ -67,6 +75,9 @@
   fix_suggestion: "No desactives verify; instala la CA correcta o pásala con verify='/ruta/ca.pem'."
   references:
     - https://cwe.mitre.org/data/definitions/295.html
+  fix_example: |
+    # Mantén la verificación TLS. Si falla, instala/pasa la CA correcta:
+    requests.get(url, verify="/ruta/ca-bundle.pem")
   tests:
     bad: tests/rules/fixtures/python/py.crypto.requests-no-verify_bad.py
     good: tests/rules/fixtures/python/py.crypto.requests-no-verify_good.py
@@ -83,6 +94,9 @@
   fix_suggestion: "Usa ssl.create_default_context()."
   references:
     - https://cwe.mitre.org/data/definitions/295.html
+  fix_example: |
+    import ssl
+    ctx = ssl.create_default_context()
   tests:
     bad: tests/rules/fixtures/python/py.crypto.ssl-unverified-context_bad.py
     good: tests/rules/fixtures/python/py.crypto.ssl-unverified-context_good.py
