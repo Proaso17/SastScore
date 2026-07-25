@@ -43,8 +43,19 @@ sastcore serve              # http://127.0.0.1:8000
 ```
 
 Sube el `.zip` de tu repositorio (o ficheros sueltos) desde el navegador y obtén las
-vulnerabilidades con su traza. El código se analiza en un subproceso aislado, no se
-ejecuta y no se almacena. También expone `POST /api/scan` (JSON) para integraciones.
+vulnerabilidades con su traza y **cómo solucionarlas**. El código se analiza en un
+subproceso aislado, no se ejecuta y no se almacena. También expone `POST /api/scan`
+(JSON) para integraciones.
+
+**Con Docker** (la imagen arranca la web por defecto):
+
+```bash
+docker build -t sastcore .
+docker run --rm -p 8080:8080 sastcore     # http://127.0.0.1:8080
+```
+
+**Desplegar en producción (Google Cloud Run):** un comando, HTTPS automático y escala a
+cero — ver [`deploy/README.md`](deploy/README.md).
 
 **Más:** [guía para escribir reglas](docs/writing-rules.md) ·
 [integración en CI/CD (GitHub Action, Docker, pre-commit)](docs/ci-integration.md).

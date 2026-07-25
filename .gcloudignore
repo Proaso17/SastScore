@@ -1,0 +1,19 @@
+# Qué NO subir a Cloud Build al ejecutar "gcloud run deploy --source .".
+# La imagen solo necesita: Dockerfile, pyproject.toml, README.md, LICENSE y src/.
+.git/
+.github/
+.venv/
+.sastcore-cache/
+**/__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+# Los fixtures contienen secretos de ejemplo (falsos): no tienen por qué salir del repo.
+tests/
+docs/
+deploy/
+*.pdf
+*.sarif
+.pre-commit-config.yaml
