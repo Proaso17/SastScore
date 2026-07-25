@@ -16,8 +16,22 @@ from sastcore.cli import app
 from sastcore.exit_codes import ExitCode
 
 
+def _force_utf8_stdio() -> None:
+    """Emite siempre UTF-8 por stdout/stderr.
+
+    En Windows el locale por defecto es cp1252; sin esto, la salida con acentos
+    (mensajes, informes JSON/SARIF) se corrompe al redirigirla o al capturarla
+    desde otro proceso (mojibake tipo "criptogrÃ¡ficamente").
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def main() -> None:
     gc.disable()
+    _force_utf8_stdio()
     code: int = ExitCode.ERROR
     try:
         app()

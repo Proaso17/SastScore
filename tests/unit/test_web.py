@@ -84,3 +84,22 @@ def test_clean_code_has_no_findings() -> None:
     response = _post_zip({"ok.py": "def add(a, b):\n    return a + b\n"})
     assert response.status_code == 200
     assert response.json()["findings"] == []
+
+
+def test_api_scan_preserves_accents() -> None:
+    """Los acentos del subproceso deben llegar intactos (sin mojibake cp1252)."""
+    response = _post_zip({"c.py": "import hashlib\nh = hashlib.md5(b'x')\n"})
+    assert response.status_code == 200
+    findings = response.json()["findings"]
+    finding = next(f for f in findings if f["rule_id"] == "py.crypto.weak-hash-md5")
+    blob = finding["message"] + (finding.get("fix_suggestion") or "")
+    assert "criptográficamente" in blob
+    assert "contraseñas" in blob
+    assert "Ã" not in blob and "Â" not in blob  # sin mojibake
+
+
+def test_scan_html_results_page_preserves_accents() -> None:
+    response = _post_zip({"c.py": "import hashlib\nh = hashlib.md5(b'x')\n"}, route="/scan")
+    assert response.status_code == 200
+    assert "criptográficamente" in response.text
+    assert "Ã" not in response.text

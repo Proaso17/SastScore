@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import stat
 import subprocess
 import sys
@@ -85,6 +86,10 @@ def _write_plain_file(dest: Path, filename: str, data: bytes) -> None:
 
 def scan_directory(root: Path) -> ScanReport:
     """Escanea ``root`` invocando la CLI en un subproceso aislado."""
+    # Forzamos UTF-8 en ambos extremos: el hijo escribe UTF-8 (PYTHONIOENCODING/
+    # PYTHONUTF8) y el padre lo lee como UTF-8. Así los acentos no dependen del
+    # locale de Windows (cp1252), que provoca mojibake ("criptogrÃ¡ficamente").
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     proc = subprocess.run(
         [
             sys.executable,
@@ -98,7 +103,9 @@ def scan_directory(root: Path) -> ScanReport:
             "--no-config",
         ],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
         timeout=SCAN_TIMEOUT_S,
         check=False,
     )
