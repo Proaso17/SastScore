@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>sastcore · resultados</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v={{ asset_ver }}">
 </head>
 <body>
   <header class="site-header">
@@ -52,7 +52,14 @@
             <ol>{% for s in f.data_flow %}<li><code>{{ s.location.path }}:{{ s.location.start_line }}</code> — {{ s.message }}</li>{% endfor %}</ol>
           </div>
           {% endif %}
-          {% if f.fix_suggestion %}<div class="fix"><b>Cómo arreglarlo:</b> {{ f.fix_suggestion }}</div>{% endif %}
+          {% if f.fix_suggestion or f.fix_example or f.references %}
+          <div class="remedy">
+            <div class="remedy-h"><span>Cómo solucionarlo</span></div>
+            {% if f.fix_suggestion %}<p class="remedy-txt">{{ f.fix_suggestion }}</p>{% endif %}
+            {% if f.fix_example %}<div class="safe-label">Ejemplo seguro</div><pre class="safe-code">{{ f.fix_example }}</pre>{% endif %}
+            {% if f.references %}<div class="refs">{% for url in f.references %}<a href="{{ url }}" target="_blank" rel="noopener noreferrer">Más información</a>{% endfor %}</div>{% endif %}
+          </div>
+          {% endif %}
           {% if f.cwe or f.owasp %}
           <div class="tags">
             {% for c in f.cwe %}<span class="tag">{{ c }}</span>{% endfor %}

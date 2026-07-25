@@ -16,6 +16,8 @@
     search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
     pin: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="2.5"/></svg>',
     check: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    wrench: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 18v3h3l6.5-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2-2 2.6-2.6z"/></svg>',
+    ext: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg>',
   };
   const el = (tag, cls, text) => {
     const n = document.createElement(tag);
@@ -210,10 +212,8 @@
     bd.appendChild(el("p", "f-msg", f.message));
     if (f.snippet) bd.appendChild(codeBlock(f.snippet, f.location.start_line));
     if (f.data_flow && f.data_flow.length) bd.appendChild(flowBlock(f.data_flow));
-    if (f.fix_suggestion) {
-      const fx = el("div", "fix");
-      fx.append(el("b", null, "Cómo arreglarlo: "), document.createTextNode(f.fix_suggestion));
-      bd.appendChild(fx);
+    if (f.fix_suggestion || f.fix_example || (f.references && f.references.length)) {
+      bd.appendChild(remediation(f));
     }
     if ((f.cwe && f.cwe.length) || f.owasp) {
       const tags = el("div", "tags");
@@ -249,6 +249,31 @@
     });
     w.appendChild(ol);
     return w;
+  }
+
+  function remediation(f) {
+    const box = el("div", "remedy");
+    const head = el("div", "remedy-h");
+    const ico = el("span", "remedy-ico"); ico.innerHTML = I.wrench;
+    head.append(ico, el("span", null, "Cómo solucionarlo"));
+    box.appendChild(head);
+    if (f.fix_suggestion) box.appendChild(el("p", "remedy-txt", f.fix_suggestion));
+    if (f.fix_example) {
+      box.appendChild(el("div", "safe-label", "Ejemplo seguro"));
+      box.appendChild(el("pre", "safe-code", f.fix_example.replace(/\n$/, "")));
+    }
+    if (f.references && f.references.length) {
+      const refs = el("div", "refs");
+      f.references.forEach((url) => {
+        const a = el("a");
+        a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+        a.append(document.createTextNode("Más información "));
+        const ic = el("span"); ic.innerHTML = I.ext; a.appendChild(ic);
+        refs.appendChild(a);
+      });
+      box.appendChild(refs);
+    }
+    return box;
   }
 
   function emptyState() {
