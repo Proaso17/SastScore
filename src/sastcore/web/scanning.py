@@ -22,10 +22,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024
-MAX_UNCOMPRESSED_BYTES = 300 * 1024 * 1024
-MAX_FILES = 20_000
-SCAN_TIMEOUT_S = 180
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
+
+# Límites configurables por entorno. El tope de subida por defecto (32 MiB) es el
+# máximo que admite Cloud Run en una petición; súbelo solo si tu plataforma lo permite.
+MAX_UPLOAD_BYTES = _int_env("SASTCORE_MAX_UPLOAD_BYTES", 32 * 1024 * 1024)
+MAX_UNCOMPRESSED_BYTES = _int_env("SASTCORE_MAX_UNCOMPRESSED_BYTES", 200 * 1024 * 1024)
+MAX_FILES = _int_env("SASTCORE_MAX_FILES", 20_000)
+SCAN_TIMEOUT_S = _int_env("SASTCORE_SCAN_TIMEOUT_S", 180)
 _CHUNK = 1 << 16
 
 
@@ -126,7 +136,8 @@ def prepare_and_scan(uploads: list[tuple[str, bytes]]) -> ScanReport:
     if not uploads:
         raise UploadError("no se subió ningún fichero")
     if sum(len(data) for _, data in uploads) > MAX_UPLOAD_BYTES:
-        raise UploadError("la subida excede el tamaño máximo (50 MB)")
+        limit_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
+        raise UploadError(f"la subida excede el tamaño máximo ({limit_mb} MB)")
 
     with tempfile.TemporaryDirectory(prefix="sastcore_web_") as tmp:
         dest = Path(tmp).resolve()

@@ -6,9 +6,12 @@ import io
 import zipfile
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
+import sastcore.web.app as app_mod
 from sastcore.web.app import app
+from sastcore.web.scanning import ScanReport
 
 client = TestClient(app)
 
@@ -103,3 +106,42 @@ def test_scan_html_results_page_preserves_accents() -> None:
     assert response.status_code == 200
     assert "criptográficamente" in response.text
     assert "Ã" not in response.text
+
+
+def test_security_headers_present() -> None:
+    response = client.get("/")
+    csp = response.headers["content-security-policy"]
+    assert "default-src 'self'" in csp
+    assert "script-src 'self'" in csp
+    assert "object-src 'none'" in csp
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "no-referrer"
+
+
+def test_interactive_docs_disabled() -> None:
+    assert client.get("/docs").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
+def test_rate_limiter_trips(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_mod, "RATE_LIMIT_PER_MIN", 3)
+    app_mod._rate_hits.clear()
+    ip = "203.0.113.7"
+    assert [app_mod._rate_limited(ip) for _ in range(3)] == [False, False, False]
+    assert app_mod._rate_limited(ip) is True
+    app_mod._rate_hits.clear()
+
+
+def test_scan_rate_limit_returns_429(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_mod, "RATE_LIMIT_PER_MIN", 1)
+    monkeypatch.setattr(
+        app_mod, "prepare_and_scan", lambda uploads: ScanReport(files_scanned=0, findings=[])
+    )
+    app_mod._rate_hits.clear()
+    payload = {"files": ("a.py", b"x = 1\n", "text/x-python")}
+    assert client.post("/api/scan", files=payload).status_code == 200
+    blocked = client.post("/api/scan", files=payload)
+    assert blocked.status_code == 429
+    assert "error" in blocked.json()
+    app_mod._rate_hits.clear()
