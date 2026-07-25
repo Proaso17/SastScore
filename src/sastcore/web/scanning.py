@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import os
 import stat
 import subprocess
@@ -21,6 +22,8 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def _int_env(name: str, default: int) -> int:
@@ -100,27 +103,37 @@ def scan_directory(root: Path) -> ScanReport:
     # PYTHONUTF8) y el padre lo lee como UTF-8. Así los acentos no dependen del
     # locale de Windows (cp1252), que provoca mojibake ("criptogrÃ¡ficamente").
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
-    proc = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "sastcore",
-            "scan",
-            str(root),
-            "--format",
-            "json",
-            "--no-cache",
-            "--no-config",
-        ],
-        capture_output=True,
-        encoding="utf-8",
-        errors="replace",
-        env=env,
-        timeout=SCAN_TIMEOUT_S,
-        check=False,
-    )
+    command = [
+        sys.executable,
+        "-m",
+        "sastcore",
+        "scan",
+        str(root),
+        "--format",
+        "json",
+        "--no-cache",
+        "--no-config",
+    ]
+    try:
+        proc = subprocess.run(
+            command,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=SCAN_TIMEOUT_S,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise UploadError("el análisis tardó demasiado y se canceló") from exc
+    except OSError as exc:
+        logger.warning("no se pudo lanzar el subproceso de escaneo: %s", exc)
+        raise UploadError("no se pudo ejecutar el análisis") from exc
     if proc.returncode not in (0, 1):
-        raise UploadError(f"error al escanear: {proc.stderr.strip()[:300]}")
+        # El stderr puede contener rutas internas/trazas: se registra en el
+        # servidor, nunca se devuelve al cliente.
+        logger.warning("el escaneo salió con código %s: %s", proc.returncode, proc.stderr.strip())
+        raise UploadError("el análisis falló al procesar la subida")
     try:
         payload = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:

@@ -21,7 +21,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from sastcore import __version__
-from sastcore.web.scanning import ScanReport, UploadError, prepare_and_scan
+from sastcore.web.scanning import (
+    MAX_FILES,
+    MAX_UPLOAD_BYTES,
+    ScanReport,
+    UploadError,
+    prepare_and_scan,
+)
 
 _HERE = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(_HERE / "templates"))
@@ -48,6 +54,10 @@ MAX_CONCURRENT_SCANS = _int_env("SASTCORE_MAX_CONCURRENT_SCANS", 2)
 # Rate-limit por IP: peticiones de escaneo permitidas por ventana de 60 s.
 RATE_LIMIT_PER_MIN = _int_env("SASTCORE_RATE_LIMIT_PER_MIN", 20)
 _RATE_WINDOW_S = 60.0
+# Nº de proxies de confianza entre el cliente y nosotros (Cloud Run = 1: el GFE).
+# El proxy de confianza añade la IP real del cliente por la DERECHA del
+# X-Forwarded-For; la parte izquierda la puede falsificar el cliente.
+TRUSTED_PROXY_HOPS = _int_env("SASTCORE_TRUSTED_PROXY_HOPS", 1)
 
 _scan_semaphore = asyncio.Semaphore(MAX_CONCURRENT_SCANS)
 _rate_hits: dict[str, deque[float]] = {}
@@ -88,11 +98,23 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=str(_HERE / "static")), name="static")
 
 
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
+def _pick_client_ip(forwarded: str | None, peer: str | None) -> str:
+    """IP del cliente resistente a falsificación de X-Forwarded-For.
+
+    Toma la IP situada ``TRUSTED_PROXY_HOPS`` posiciones desde el final: la que
+    añadió el proxy de confianza. Coger la primera (como hacíamos) permitía al
+    cliente falsear su IP y saltarse el rate-limit inyectando su propio XFF.
+    """
     if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+        if parts:
+            return parts[max(0, len(parts) - TRUSTED_PROXY_HOPS)]
+    return peer or "unknown"
+
+
+def _client_ip(request: Request) -> str:
+    peer = request.client.host if request.client else None
+    return _pick_client_ip(request.headers.get("x-forwarded-for"), peer)
 
 
 def _rate_limited(ip: str) -> bool:
@@ -120,26 +142,37 @@ def _with_security_headers(response: Response, request: Request) -> Response:
     return response
 
 
+def _error_response(request: Request, status_code: int, message: str) -> Response:
+    """JSON para /api/scan, texto plano para el resto."""
+    if request.url.path == "/api/scan":
+        return JSONResponse({"error": message}, status_code=status_code)
+    return PlainTextResponse(message, status_code=status_code)
+
+
+def _declared_length_exceeds(request: Request) -> bool:
+    """Rechazo temprano por Content-Length antes de bufferear el cuerpo."""
+    declared = request.headers.get("content-length")
+    return bool(declared and declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES)
+
+
 @app.middleware("http")
 async def _harden(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
-    if (
-        request.method == "POST"
-        and request.url.path in _SCAN_PATHS
-        and _rate_limited(_client_ip(request))
-    ):
-        message = "Demasiadas peticiones. Espera un momento y reinténtalo."
-        response: Response = (
-            JSONResponse({"error": message}, status_code=429)
-            if request.url.path == "/api/scan"
-            else PlainTextResponse(message, status_code=429)
-        )
-        return _with_security_headers(response, request)
+    if request.method == "POST" and request.url.path in _SCAN_PATHS:
+        if _declared_length_exceeds(request):
+            limit_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
+            error = _error_response(request, 413, f"La subida excede el máximo ({limit_mb} MB).")
+            return _with_security_headers(error, request)
+        if _rate_limited(_client_ip(request)):
+            message = "Demasiadas peticiones. Espera un momento y reinténtalo."
+            return _with_security_headers(_error_response(request, 429, message), request)
     return _with_security_headers(await call_next(request), request)
 
 
 async def _collect(files: list[UploadFile]) -> list[tuple[str, bytes]]:
+    if len(files) > MAX_FILES:
+        raise UploadError(f"demasiados ficheros en la subida (máx. {MAX_FILES})")
     return [(file.filename or "upload", await file.read()) for file in files]
 
 
@@ -158,8 +191,8 @@ async def index(request: Request) -> Response:
 
 @app.post("/scan")
 async def scan(request: Request, files: Annotated[list[UploadFile], File()]) -> Response:
-    uploads = await _collect(files)
     try:
+        uploads = await _collect(files)
         report = await _run_scan(uploads)
     except UploadError as exc:
         return templates.TemplateResponse(
@@ -187,8 +220,8 @@ async def scan(request: Request, files: Annotated[list[UploadFile], File()]) -> 
 
 @app.post("/api/scan")
 async def api_scan(files: Annotated[list[UploadFile], File()]) -> JSONResponse:
-    uploads = await _collect(files)
     try:
+        uploads = await _collect(files)
         report = await _run_scan(uploads)
     except UploadError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)

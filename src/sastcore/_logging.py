@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 
+from rich.console import Console
 from rich.logging import RichHandler
 
 _configured = False
@@ -32,10 +33,19 @@ def configure_logging(*, verbose: bool = False, quiet: bool = False) -> None:
     else:
         level = logging.WARNING
 
+    # Los logs van a STDERR: stdout se reserva para la salida de datos (p. ej. el
+    # informe JSON de `scan --format json`), que otro proceso parsea; un log en
+    # stdout la corrompería.
     logging.basicConfig(
         level=level,
         format="%(message)s",
         datefmt="[%X]",
-        handlers=[RichHandler(rich_tracebacks=True, show_path=False)],
+        handlers=[
+            RichHandler(
+                console=Console(stderr=True),
+                rich_tracebacks=True,
+                show_path=False,
+            )
+        ],
     )
     _configured = True

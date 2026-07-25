@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import io
+import subprocess
 import zipfile
+from pathlib import Path
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 import sastcore.web.app as app_mod
+import sastcore.web.scanning as scanning
 from sastcore.web.app import app
 from sastcore.web.scanning import ScanReport
 
@@ -145,3 +148,72 @@ def test_scan_rate_limit_returns_429(monkeypatch: pytest.MonkeyPatch) -> None:
     assert blocked.status_code == 429
     assert "error" in blocked.json()
     app_mod._rate_hits.clear()
+
+
+def test_client_ip_resists_xff_spoofing() -> None:
+    # El cliente falsifica la primera IP; el proxy de confianza añade la real por
+    # la derecha. Con 1 salto de confianza (Cloud Run) debemos coger la última.
+    assert app_mod._pick_client_ip("1.2.3.4, 203.0.113.9", "10.0.0.1") == "203.0.113.9"
+    assert app_mod._pick_client_ip(None, "10.0.0.1") == "10.0.0.1"
+    assert app_mod._pick_client_ip("  ", "10.0.0.1") == "10.0.0.1"
+
+
+def test_too_many_files_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_mod, "MAX_FILES", 3)
+    files = [("files", (f"f{i}.py", b"x = 1\n", "text/x-python")) for i in range(5)]
+    response = client.post("/api/scan", files=files)
+    assert response.status_code == 400
+    assert "error" in response.json()
+
+
+def test_oversized_content_length_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_mod, "MAX_UPLOAD_BYTES", 10)
+    response = client.post("/api/scan", files={"files": ("a.py", b"x = 1\n" * 50, "text/x-python")})
+    assert response.status_code == 413
+    assert "error" in response.json()
+
+
+def test_scan_timeout_becomes_upload_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def _timeout(*args: object, **kwargs: object) -> object:
+        raise subprocess.TimeoutExpired(cmd="sastcore", timeout=1)
+
+    monkeypatch.setattr(subprocess, "run", _timeout)
+    with pytest.raises(scanning.UploadError):
+        scanning.scan_directory(tmp_path)
+
+
+def test_scan_error_does_not_leak_stderr(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def _fail(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["sastcore"], returncode=2, stdout="", stderr="/srv/secret/internal.py Traceback"
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fail)
+    with pytest.raises(scanning.UploadError) as excinfo:
+        scanning.scan_directory(tmp_path)
+    message = str(excinfo.value)
+    assert "secret" not in message
+    assert "Traceback" not in message
+
+
+def test_logs_go_to_stderr() -> None:
+    import logging
+    import sys
+
+    from rich.logging import RichHandler
+
+    import sastcore._logging as logging_module
+
+    root = logging.getLogger()
+    saved_handlers = root.handlers[:]
+    saved_configured = logging_module._configured
+    root.handlers.clear()
+    logging_module._configured = False
+    try:
+        logging_module.configure_logging()
+        handler = root.handlers[0]
+        assert isinstance(handler, RichHandler)
+        assert handler.console.file is sys.stderr
+    finally:
+        root.handlers[:] = saved_handlers
+        logging_module._configured = saved_configured
