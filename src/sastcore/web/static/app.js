@@ -114,7 +114,7 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (_err) {
       show(uploadView);
-      showAlert("Error de red al contactar con el servidor.");
+      showAlert("No se pudo contactar con el servidor. Asegúrate de que está arrancado (ejecuta 'sastcore serve') y reintenta.");
     }
   });
 
