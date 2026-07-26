@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import time
 import uuid
 from collections import deque
@@ -81,6 +82,9 @@ report_store = build_store()
 
 _SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 _SCAN_PATHS = frozenset({"/scan", "/api/scan", "/api/scan-url"})
+# Los rule_id son de la forma "py.taint.sql-injection": lista blanca estricta, que
+# además evita inyectar saltos de línea u otro ruido en el log al registrarlos.
+_RULE_ID_RE = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 
 # Descarga de informes: formato -> (reporter, media-type, nombre de fichero).
 _REPORTERS: dict[str, tuple[TextReporter, str, str]] = {
@@ -102,6 +106,17 @@ class ScanUrlRequest(BaseModel):
     """Cuerpo de /api/scan-url: la URL del repo público de GitHub a analizar."""
 
     url: str
+
+
+class FeedbackRequest(BaseModel):
+    """Cuerpo de /api/feedback: señal de que una regla dio un falso positivo.
+
+    A propósito **no** se acepta código ni rutas: solo el identificador de la regla.
+    Así la señal sirve para mejorar las reglas sin recibir nada del proyecto del
+    usuario (ver la promesa de privacidad en /legal).
+    """
+
+    rule_id: str = Field(max_length=120)
 
 
 # Cabeceras de seguridad. La app es autocontenida (sin CDN), así que la CSP puede
@@ -198,7 +213,11 @@ def _is_guarded_post(request: Request) -> bool:
     if request.method != "POST":
         return False
     path = request.url.path
-    return path in _SCAN_PATHS or path.startswith("/report/") or path == "/api/share"
+    return (
+        path in _SCAN_PATHS
+        or path.startswith("/report/")
+        or path in {"/api/share", "/api/feedback"}
+    )
 
 
 def _declared_length_exceeds(request: Request) -> bool:
@@ -333,6 +352,21 @@ async def download_report(fmt: str, payload: ReportRequest) -> Response:
 def _validated_findings(raw: list[dict[str, Any]]) -> list[Finding]:
     """Reconstruye los hallazgos, rechazando cualquier payload que no case con el modelo."""
     return [Finding.model_validate(item) for item in raw]
+
+
+@app.post("/api/feedback")
+async def report_false_positive(payload: FeedbackRequest) -> JSONResponse:
+    """Registra que una regla produjo un falso positivo.
+
+    Se anota en el log del servidor (lo recoge Cloud Logging) en vez de guardarlo en
+    una base de datos: basta para saber qué reglas fallan y no añade estado ni
+    almacena nada del usuario.
+    """
+    rule_id = payload.rule_id.strip()
+    if not _RULE_ID_RE.match(rule_id):
+        return JSONResponse({"error": "identificador de regla no válido"}, status_code=400)
+    logger.warning("feedback: falso positivo reportado para la regla %s", rule_id)
+    return JSONResponse({"status": "ok"})
 
 
 @app.post("/api/share")

@@ -301,6 +301,30 @@ def test_report_id_traversal_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert store.load("bad id!") is None
 
 
+def test_feedback_accepts_rule_id() -> None:
+    response = client.post("/api/feedback", json={"rule_id": "py.taint.sql-injection"})
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_feedback_rejects_malformed_rule_id() -> None:
+    """Nada de saltos de línea ni texto libre: evita ensuciar/inyectar el log."""
+    for bad in ("py.taint\nINFO fake log line", "../../etc/passwd", "<script>", "", "A" * 200):
+        response = client.post("/api/feedback", json={"rule_id": bad})
+        # 400 por la lista blanca; 422 si pydantic lo corta antes (longitud máxima).
+        assert response.status_code in (400, 422), bad
+
+
+def test_feedback_rejects_extra_payload() -> None:
+    """El endpoint no debe aceptar código: solo el identificador de la regla."""
+    response = client.post(
+        "/api/feedback",
+        json={"rule_id": "py.dangerous.eval", "snippet": "secret = 'abc'"},
+    )
+    assert response.status_code == 200  # el campo extra se ignora
+    assert response.json()["status"] == "ok"
+
+
 def test_share_rejects_invalid_findings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _use_tmp_store(monkeypatch, tmp_path)
     response = client.post("/api/share", json={"files_scanned": 0, "findings": [{"nope": 1}]})

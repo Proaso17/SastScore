@@ -351,12 +351,15 @@
     if (f.fix_suggestion || f.fix_example || (f.references && f.references.length)) {
       bd.appendChild(remediation(f));
     }
+    const foot = el("div", "f-foot");
     if ((f.cwe && f.cwe.length) || f.owasp) {
       const tags = el("div", "tags");
       (f.cwe || []).forEach((c) => tags.appendChild(el("span", "tag", c)));
       if (f.owasp) tags.appendChild(el("span", "tag", f.owasp));
-      bd.appendChild(tags);
+      foot.appendChild(tags);
     }
+    foot.appendChild(falsePositiveButton(f.rule_id));
+    bd.appendChild(foot);
     art.appendChild(bd);
     return art;
   }
@@ -410,6 +413,28 @@
       box.appendChild(refs);
     }
     return box;
+  }
+
+  function falsePositiveButton(ruleId) {
+    // Solo se envía el identificador de la regla, nunca el código ni la ruta.
+    const btn = el("button", "fp-btn", "¿Falso positivo?");
+    btn.type = "button";
+    btn.title = "Avísanos si esta regla se ha equivocado (solo enviamos el nombre de la regla)";
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        const res = await fetch("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rule_id: ruleId }),
+        });
+        btn.textContent = res.ok ? "¡Gracias por avisar!" : "No se pudo enviar";
+        btn.classList.toggle("sent", res.ok);
+      } catch (_e) {
+        btn.textContent = "No se pudo enviar";
+      }
+    });
+    return btn;
   }
 
   function emptyState() {
