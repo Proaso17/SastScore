@@ -64,7 +64,20 @@ O en la consola: **Cloud Run → sastcore → Registros**.
 
 Otras variables de entorno que puedes ajustar (con `--set-env-vars`):
 `SASTCORE_MAX_UPLOAD_BYTES` (máx. **32 MiB** en Cloud Run), `SASTCORE_MAX_UNCOMPRESSED_BYTES`,
-`SASTCORE_MAX_FILES`, `SASTCORE_SCAN_TIMEOUT_S`, `SASTCORE_RATE_LIMIT_PER_MIN`.
+`SASTCORE_MAX_FILES`, `SASTCORE_SCAN_TIMEOUT_S`, `SASTCORE_RATE_LIMIT_PER_MIN`,
+`SASTCORE_SCAN_BATCH_FILES`.
+
+### Sobre `SASTCORE_SCAN_BATCH_FILES` (ficheros por subproceso)
+
+El escaneo se reparte en lotes y cada lote corre en un subproceso nuevo. Arrancar un
+proceso cuesta ~1,5 s y analizar un fichero ~0,06 s, así que **cuantos menos lotes,
+más rápido**: el valor por defecto (200) es alto a propósito. Si un lote muere sin
+producir informe, el escaneo lo parte en dos, reduce el tamaño para los siguientes y
+continúa, de modo que un fichero problemático no arruina el análisis completo.
+
+Esto existe porque el binding de tree-sitter se corrompe tras parsear muchos ficheros
+en el mismo proceso (**observado en Windows**, ver `docs/adr`). Si en tu despliegue de
+Linux no ocurre, el valor alto por defecto ya hace que se use un solo subproceso.
 
 ## Enlaces compartibles (opcional)
 

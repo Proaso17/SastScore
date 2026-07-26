@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import subprocess
 import tarfile
 import zipfile
@@ -352,13 +353,19 @@ def test_oversized_content_length_rejected(monkeypatch: pytest.MonkeyPatch) -> N
     assert "error" in response.json()
 
 
+def _scannable(tmp_path: Path) -> Path:
+    """Directorio con un fichero analizable (scan_directory descubre antes de lanzar)."""
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    return tmp_path
+
+
 def test_scan_timeout_becomes_upload_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     def _timeout(*args: object, **kwargs: object) -> object:
         raise subprocess.TimeoutExpired(cmd="sastcore", timeout=1)
 
     monkeypatch.setattr(subprocess, "run", _timeout)
     with pytest.raises(scanning.UploadError):
-        scanning.scan_directory(tmp_path)
+        scanning.scan_directory(_scannable(tmp_path))
 
 
 def test_scan_error_does_not_leak_stderr(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -369,10 +376,113 @@ def test_scan_error_does_not_leak_stderr(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     monkeypatch.setattr(subprocess, "run", _fail)
     with pytest.raises(scanning.UploadError) as excinfo:
-        scanning.scan_directory(tmp_path)
+        scanning.scan_directory(_scannable(tmp_path))
     message = str(excinfo.value)
     assert "secret" not in message
     assert "Traceback" not in message
+
+
+_SEGFAULT_RC = 3221225477  # 0xC0000005 en Windows (access violation)
+
+
+def test_complete_report_used_even_if_process_crashed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Si el informe JSON está completo, se usa aunque el proceso muriera al salir.
+
+    El binding de tree-sitter puede provocar un fallo de segmentación al liberar
+    memoria en árboles grandes (ADR-0005), después de haber emitido el informe.
+    Descartarlo hacía que la web dijese "el análisis falló" en repos válidos.
+    """
+    report = '{"files_scanned": 68, "findings": []}'
+
+    def _crash_after_output(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["sastcore"], returncode=_SEGFAULT_RC, stdout=report, stderr="access violation"
+        )
+
+    monkeypatch.setattr(subprocess, "run", _crash_after_output)
+    result = scanning.scan_directory(_scannable(tmp_path))
+    assert result.files_scanned == 68
+
+
+def test_truncated_report_after_crash_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Un informe cortado a medias (crash durante el escaneo) sí debe fallar."""
+
+    def _crash_mid_scan(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["sastcore"],
+            returncode=_SEGFAULT_RC,
+            stdout='{"files_scanned": 68, "findings": [{"rule_id": "x.y"',
+            stderr="access violation",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _crash_mid_scan)
+    with pytest.raises(scanning.UploadError):
+        scanning.scan_directory(_scannable(tmp_path))
+
+
+def test_non_object_report_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """JSON válido pero que no es un objeto de informe tampoco se acepta."""
+
+    def _weird(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["sastcore"], returncode=0, stdout="[1, 2, 3]", stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", _weird)
+    with pytest.raises(scanning.UploadError):
+        scanning.scan_directory(_scannable(tmp_path))
+
+
+def test_scan_splits_batch_and_skips_only_the_bad_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Un fichero que revienta el proceso no debe arruinar el resto del análisis."""
+    for i in range(4):
+        (tmp_path / f"f{i}.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "bad.py").write_text("y = 2\n", encoding="utf-8")
+
+    def _crash_if_bad_included(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        targets = [arg for arg in command if arg.endswith(".py")]
+        if any("bad" in target for target in targets):
+            if len(targets) > 1:  # lote contaminado: muere sin informe
+                return subprocess.CompletedProcess(command, _SEGFAULT_RC, "", "boom")
+            return subprocess.CompletedProcess(command, _SEGFAULT_RC, "", "boom")
+        report = f'{{"files_scanned": {len(targets)}, "findings": []}}'
+        return subprocess.CompletedProcess(command, 0, report, "")
+
+    monkeypatch.setattr(subprocess, "run", _crash_if_bad_included)
+    monkeypatch.setattr(scanning, "SCAN_BATCH_FILES", 5)
+    result = scanning.scan_directory(tmp_path)
+    # Los 4 ficheros buenos se analizan; solo se omite el problemático.
+    assert result.files_scanned == 4
+
+
+def test_scan_merges_results_across_batches(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Con varios lotes, los hallazgos y el recuento se suman."""
+    for i in range(6):
+        (tmp_path / f"f{i}.py").write_text("x = 1\n", encoding="utf-8")
+
+    def _one_finding_per_batch(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        targets = [arg for arg in command if arg.endswith(".py")]
+        finding = dict(_FINDING)
+        report = json.dumps({"files_scanned": len(targets), "findings": [finding]})
+        return subprocess.CompletedProcess(command, 1, report, "")
+
+    monkeypatch.setattr(subprocess, "run", _one_finding_per_batch)
+    monkeypatch.setattr(scanning, "SCAN_BATCH_FILES", 2)
+    result = scanning.scan_directory(tmp_path)
+    assert result.files_scanned == 6
+    assert len(result.findings) == 3  # 6 ficheros / lotes de 2 = 3 lotes
 
 
 def test_logs_go_to_stderr() -> None:

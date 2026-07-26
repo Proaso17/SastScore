@@ -107,7 +107,10 @@ def _scan_targets(scheduler: Scheduler, targets: list[Path]) -> tuple[list[Findi
         if target.is_dir():
             result = scheduler.run(target)
         elif target.is_file():
-            result = scheduler.run_file(target)
+            # Se conserva la ruta tal como se pidió (no solo el nombre): así escanear
+            # ficheros sueltos reporta la misma ruta que escanear su directorio.
+            rel = None if target.is_absolute() else target.as_posix()
+            result = scheduler.run_file(target, rel_path=rel)
         else:
             console.print(f"[red]Ruta no encontrada:[/red] {target}")
             raise typer.Exit(ExitCode.ERROR)

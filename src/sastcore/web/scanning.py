@@ -21,7 +21,10 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import zipfile
+from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -44,6 +47,12 @@ MAX_UPLOAD_BYTES = _int_env("SASTCORE_MAX_UPLOAD_BYTES", 32 * 1024 * 1024)
 MAX_UNCOMPRESSED_BYTES = _int_env("SASTCORE_MAX_UNCOMPRESSED_BYTES", 200 * 1024 * 1024)
 MAX_FILES = _int_env("SASTCORE_MAX_FILES", 20_000)
 SCAN_TIMEOUT_S = _int_env("SASTCORE_SCAN_TIMEOUT_S", 180)
+# Ficheros por subproceso (tope inicial). Arrancar un proceso cuesta ~1,5 s y analizar
+# un fichero ~0,06 s, así que conviene que quepan muchos ficheros por lote. Si un lote
+# muere —el binding de tree-sitter se corrompe tras parsear muchos ficheros en el mismo
+# proceso en Windows, ver ADR-0005— el escaneo reduce el tamaño automáticamente, así que
+# este valor es solo el punto de partida.
+SCAN_BATCH_FILES = _int_env("SASTCORE_SCAN_BATCH_FILES", 200)
 # Descarga de repos de GitHub (tarball comprimido) por URL.
 MAX_DOWNLOAD_BYTES = _int_env("SASTCORE_MAX_DOWNLOAD_BYTES", 60 * 1024 * 1024)
 GITHUB_TIMEOUT_S = _int_env("SASTCORE_GITHUB_TIMEOUT_S", 30)
@@ -112,18 +121,22 @@ def _write_plain_file(dest: Path, filename: str, data: bytes) -> None:
     (dest / safe).write_bytes(data)
 
 
-def scan_directory(root: Path) -> ScanReport:
-    """Escanea ``root`` invocando la CLI en un subproceso aislado."""
-    # Forzamos UTF-8 en ambos extremos: el hijo escribe UTF-8 (PYTHONIOENCODING/
-    # PYTHONUTF8) y el padre lo lee como UTF-8. Así los acentos no dependen del
-    # locale de Windows (cp1252), que provoca mojibake ("criptogrÃ¡ficamente").
+def _discover_targets(root: Path) -> list[str]:
+    """Rutas relativas a escanear, con las mismas reglas de descubrimiento que la CLI."""
+    from sastcore.discovery.walker import FileWalker
+
+    return [rel for _path, rel in FileWalker(root).walk()]
+
+
+def _scan_batch(root: Path, targets: Sequence[str], timeout_s: float) -> dict[str, Any] | None:
+    """Escanea un lote de ficheros en un subproceso; ``None`` si no dio informe usable."""
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     command = [
         sys.executable,
         "-m",
         "sastcore",
         "scan",
-        str(root),
+        *targets,
         "--format",
         "json",
         "--no-cache",
@@ -136,27 +149,91 @@ def scan_directory(root: Path) -> ScanReport:
             encoding="utf-8",
             errors="replace",
             env=env,
-            timeout=SCAN_TIMEOUT_S,
+            cwd=str(root),
+            timeout=timeout_s,
             check=False,
         )
-    except subprocess.TimeoutExpired as exc:
-        raise UploadError("el análisis tardó demasiado y se canceló") from exc
     except OSError as exc:
         logger.warning("no se pudo lanzar el subproceso de escaneo: %s", exc)
         raise UploadError("no se pudo ejecutar el análisis") from exc
-    if proc.returncode not in (0, 1):
-        # El stderr puede contener rutas internas/trazas: se registra en el
-        # servidor, nunca se devuelve al cliente.
-        logger.warning("el escaneo salió con código %s: %s", proc.returncode, proc.stderr.strip())
-        raise UploadError("el análisis falló al procesar la subida")
+
+    # Se mira la SALIDA antes del código de retorno: el informe JSON se emite al
+    # final, así que si se parsea completo el lote terminó y sus resultados son
+    # fiables aunque el proceso muriera después (el binding de tree-sitter puede
+    # provocar un fallo de segmentación al liberar memoria, ver ADR-0005).
     try:
         payload = json.loads(proc.stdout)
-    except json.JSONDecodeError as exc:
-        raise UploadError("la salida del escaneo no es válida") from exc
-    return ScanReport(
-        files_scanned=int(payload.get("files_scanned", 0)),
-        findings=list(payload.get("findings", [])),
-    )
+    except json.JSONDecodeError:
+        payload = None
+    if not isinstance(payload, dict):
+        # El stderr puede llevar rutas internas/trazas: se registra, nunca se devuelve.
+        logger.warning(
+            "lote sin informe utilizable (código %s, %d fichero(s)): %s",
+            proc.returncode,
+            len(targets),
+            proc.stderr.strip()[:300],
+        )
+        return None
+    if proc.returncode not in (0, 1):
+        logger.info(
+            "el lote terminó con código %s pero produjo un informe completo; se usa",
+            proc.returncode,
+        )
+    return payload
+
+
+def scan_directory(root: Path) -> ScanReport:
+    """Escanea ``root`` en **lotes**, cada uno en un subproceso aislado.
+
+    El binding de tree-sitter se corrompe tras parsear unas decenas de ficheros en el
+    mismo proceso (ADR-0005), así que un único subproceso no basta para un repositorio
+    real: se trocea el trabajo y cada lote arranca con un intérprete limpio. Si un lote
+    muere sin dar informe se parte en dos y se reintenta, de modo que un solo fichero
+    problemático no arruina el análisis completo.
+    """
+    targets = _discover_targets(root)
+    if not targets:
+        return ScanReport(files_scanned=0, findings=[])
+
+    deadline = time.monotonic() + SCAN_TIMEOUT_S
+    findings: list[dict[str, Any]] = []
+    files_scanned = 0
+    queue = deque(targets)
+    split: list[list[str]] = []  # mitades pendientes de un lote que murió
+    # Se empieza con lotes grandes (un proceso arranca en ~1,5 s, así que cuantos
+    # menos procesos, mejor) y se reduce el tamaño solo si alguno muere.
+    size = SCAN_BATCH_FILES
+
+    while queue or split:
+        # Primero las mitades pendientes de un lote que murió; si no, un lote nuevo.
+        batch = split.pop(0) if split else [queue.popleft() for _ in range(min(size, len(queue)))]
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise UploadError("el análisis tardó demasiado y se canceló")
+        try:
+            payload = _scan_batch(root, batch, remaining)
+        except subprocess.TimeoutExpired as exc:
+            raise UploadError("el análisis tardó demasiado y se canceló") from exc
+
+        if payload is None:
+            if len(batch) > 1:
+                # Se parte en dos para aislar el fichero problemático y se aprende
+                # el tamaño: los lotes siguientes ya salen más pequeños.
+                middle = len(batch) // 2
+                split[:0] = [batch[:middle], batch[middle:]]
+                size = max(1, min(size, middle))
+                continue
+            logger.warning("se omite un fichero que no se pudo analizar: %s", batch[0])
+            continue
+
+        files_scanned += int(payload.get("files_scanned", 0))
+        findings.extend(payload.get("findings", []))
+
+    if files_scanned == 0:
+        # Había ficheros pero no se pudo analizar ninguno: es un fallo, no un
+        # "todo limpio". Devolver un informe vacío haría creer que no hay problemas.
+        raise UploadError("el análisis falló al procesar la subida")
+    return ScanReport(files_scanned=files_scanned, findings=findings)
 
 
 def prepare_and_scan(uploads: list[tuple[str, bytes]]) -> ScanReport:
