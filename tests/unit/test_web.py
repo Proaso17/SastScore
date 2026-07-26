@@ -301,6 +301,53 @@ def test_report_id_traversal_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert store.load("bad id!") is None
 
 
+def test_scans_have_their_own_stricter_quota(monkeypatch: pytest.MonkeyPatch) -> None:
+    """La cuota de escaneos es independiente (y menor) que la de peticiones baratas."""
+    monkeypatch.setattr(app_mod, "RATE_LIMIT_SCANS_PER_MIN", 2)
+    monkeypatch.setattr(app_mod, "RATE_LIMIT_PER_MIN", 50)
+    monkeypatch.setattr(
+        app_mod, "prepare_and_scan", lambda uploads: ScanReport(files_scanned=1, findings=[])
+    )
+    payload = {"files": ("a.py", b"x = 1\n", "text/x-python")}
+    codes = [client.post("/api/scan", files=payload).status_code for _ in range(3)]
+    assert codes == [200, 200, 429]
+    # Las peticiones baratas siguen permitidas: usan otro cubo.
+    assert client.post("/api/feedback", json={"rule_id": "py.dangerous.eval"}).status_code == 200
+
+
+def test_rate_limit_sets_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app_mod, "RATE_LIMIT_PER_MIN", 1)
+    client.post("/api/feedback", json={"rule_id": "py.dangerous.eval"})
+    blocked = client.post("/api/feedback", json={"rule_id": "py.dangerous.eval"})
+    assert blocked.status_code == 429
+    assert blocked.headers["retry-after"] == "60"
+
+
+def test_concurrent_scans_per_ip_are_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Una misma IP no puede tener dos análisis en vuelo a la vez."""
+    monkeypatch.setattr(app_mod, "MAX_SCANS_PER_IP", 1)
+    app_mod._scans_in_flight.clear()
+    app_mod._scans_in_flight["testclient"] = 1  # simula un escaneo ya en curso
+    try:
+        response = client.post("/api/scan", files={"files": ("a.py", b"x = 1\n", "text/x-python")})
+        assert response.status_code == 429
+        assert "en curso" in response.json()["error"]
+    finally:
+        app_mod._scans_in_flight.clear()
+
+
+def test_scan_slot_is_released_after_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tras responder, la plaza de la IP queda libre (si no, se bloquearía sola)."""
+    monkeypatch.setattr(
+        app_mod, "prepare_and_scan", lambda uploads: ScanReport(files_scanned=1, findings=[])
+    )
+    app_mod._scans_in_flight.clear()
+    payload = {"files": ("a.py", b"x = 1\n", "text/x-python")}
+    assert client.post("/api/scan", files=payload).status_code == 200
+    assert app_mod._scans_in_flight == {}
+    assert client.post("/api/scan", files=payload).status_code == 200
+
+
 def test_feedback_accepts_rule_id() -> None:
     response = client.post("/api/feedback", json={"rule_id": "py.taint.sql-injection"})
     assert response.status_code == 200
@@ -341,7 +388,8 @@ def test_rate_limiter_trips(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_scan_rate_limit_returns_429(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(app_mod, "RATE_LIMIT_PER_MIN", 1)
+    # Los escaneos tienen su propia cuota (más estrecha que la de peticiones baratas).
+    monkeypatch.setattr(app_mod, "RATE_LIMIT_SCANS_PER_MIN", 1)
     monkeypatch.setattr(
         app_mod, "prepare_and_scan", lambda uploads: ScanReport(files_scanned=0, findings=[])
     )

@@ -65,7 +65,20 @@ O en la consola: **Cloud Run → sastcore → Registros**.
 Otras variables de entorno que puedes ajustar (con `--set-env-vars`):
 `SASTCORE_MAX_UPLOAD_BYTES` (máx. **32 MiB** en Cloud Run), `SASTCORE_MAX_UNCOMPRESSED_BYTES`,
 `SASTCORE_MAX_FILES`, `SASTCORE_SCAN_TIMEOUT_S`, `SASTCORE_RATE_LIMIT_PER_MIN`,
+`SASTCORE_RATE_LIMIT_SCANS_PER_MIN`, `SASTCORE_MAX_SCANS_PER_IP`,
 `SASTCORE_SCAN_BATCH_FILES`.
+
+### Protección frente a abuso (incluida, sin coste)
+
+| Defensa | Valor | Qué evita |
+|---|---|---|
+| `SASTCORE_RATE_LIMIT_SCANS_PER_MIN` | 5 | Escaneos por IP y minuto. Cuota **aparte** de las peticiones baratas, porque un escaneo cuesta segundos de CPU. |
+| `SASTCORE_MAX_SCANS_PER_IP` | 1 | Que una sola IP ocupe todas las plazas de análisis. |
+| `SASTCORE_RATE_LIMIT_PER_MIN` | 20 | Peticiones baratas (informes, compartir, feedback) por IP y minuto. |
+| `--max-instances` | 4 | Techo de coste y de daño (se fija al desplegar). |
+
+Las respuestas 429 incluyen `Retry-After`. El rate-limit es en memoria y **por
+instancia**: suficiente para un lanzamiento, pero no es un límite global (ver más abajo).
 
 ### Sobre `SASTCORE_SCAN_BATCH_FILES` (ficheros por subproceso)
 
@@ -131,8 +144,41 @@ Sigue las instrucciones para añadir los registros DNS; el certificado TLS es au
 gcloud run services delete sastcore --region europe-southwest1
 ```
 
+## WAF (Cloud Armor): lee esto antes de intentarlo
+
+**Cloud Armor no se puede aplicar a la URL `*.run.app`.** Es la limitación clave y
+obliga a rehacer la arquitectura:
+
+1. Cloud Armor solo actúa sobre un **balanceador de carga de aplicación externo** con un
+   *serverless NEG* apuntando al servicio. No se «activa» sobre Cloud Run directamente.
+2. Peor aún: mientras la **URL por defecto `*.run.app` siga activa, el atacante la usa y
+   se salta el WAF**. Para cerrarlo hay que desactivar esa URL (ingress
+   `internal-and-gclb`), lo que implica **tener dominio propio y certificado**.
+
+**Coste aproximado** (a julio de 2026): regla de reenvío del balanceador ~**18 $/mes**
+(0,025 $/hora), política de Cloud Armor **5 $/mes** + **1 $/mes por regla** + ~**0,75 $
+por millón de peticiones**. Total realista: **~25-30 $/mes**, frente a los ~0 € actuales
+con la capa gratuita de Cloud Run.
+
+**Recomendación:** no montarlo todavía. Sale caro, obliga a abandonar la URL gratuita y
+las defensas de la tabla anterior (cuotas por IP, tope de simultáneos, `--max-instances`)
+cubren de sobra un lanzamiento sin tráfico. Móntalo cuando se cumpla alguna de estas:
+
+- Recibes abuso real que las cuotas por instancia no frenan (el rate-limit es por
+  instancia: con varias instancias, el límite efectivo se multiplica).
+- Ya tienes **dominio propio** (que hace falta igualmente para el WAF).
+- La factura o el tráfico justifican los ~25-30 $/mes.
+
+Cuando llegue el momento, el orden es: dominio → balanceador con serverless NEG →
+política de Cloud Armor (regla `throttle` por IP + reglas OWASP preconfiguradas) →
+`--ingress internal-and-gclb` para cerrar la URL directa.
+
+**Alternativa intermedia y gratuita:** poner Cloudflare (plan gratuito) delante del
+dominio, que da WAF y rate-limit básicos. Requiere igualmente cerrar el acceso directo a
+la URL de Cloud Run para que no se pueda esquivar.
+
 ## Siguientes pasos (opcionales)
 
 - **CI/CD:** conectar el repo para desplegar en cada push (Cloud Build trigger).
-- **Rate-limit global / WAF:** Cloud Armor delante de Cloud Run.
 - **Cola de trabajos** para repos muy grandes (procesar en segundo plano).
+- **Rate-limit global** (Redis/Memorystore) si el límite por instancia se queda corto.

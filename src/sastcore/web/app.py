@@ -65,8 +65,13 @@ ASSET_VER = _asset_version()
 # ── Límites operativos (configurables por entorno) ──────────────────────────
 # Nº de escaneos pesados simultáneos por instancia (cada uno lanza un subproceso).
 MAX_CONCURRENT_SCANS = _int_env("SASTCORE_MAX_CONCURRENT_SCANS", 2)
-# Rate-limit por IP: peticiones de escaneo permitidas por ventana de 60 s.
+# Rate-limit por IP y minuto para peticiones baratas (informes, feedback, compartir).
 RATE_LIMIT_PER_MIN = _int_env("SASTCORE_RATE_LIMIT_PER_MIN", 20)
+# Los escaneos consumen CPU durante segundos, así que llevan una cuota aparte y más
+# estrecha: sin esto, 20 escaneos/minuto por IP bastan para saturar la instancia.
+RATE_LIMIT_SCANS_PER_MIN = _int_env("SASTCORE_RATE_LIMIT_SCANS_PER_MIN", 5)
+# Escaneos simultáneos por IP: evita que un solo cliente ocupe todas las plazas.
+MAX_SCANS_PER_IP = _int_env("SASTCORE_MAX_SCANS_PER_IP", 1)
 _RATE_WINDOW_S = 60.0
 # Nº de proxies de confianza entre el cliente y nosotros (Cloud Run = 1: el GFE).
 # El proxy de confianza añade la IP real del cliente por la DERECHA del
@@ -77,6 +82,8 @@ REPORT_TTL_HOURS = _int_env("SASTCORE_REPORT_TTL_HOURS", 168)
 
 _scan_semaphore = asyncio.Semaphore(MAX_CONCURRENT_SCANS)
 _rate_hits: dict[str, deque[float]] = {}
+# Escaneos en vuelo por IP (para MAX_SCANS_PER_IP).
+_scans_in_flight: dict[str, int] = {}
 # Almacén de informes compartibles (opt-in): fichero en local, GCS en producción.
 report_store = build_store()
 
@@ -171,13 +178,18 @@ def _client_ip(request: Request) -> str:
     return _pick_client_ip(request.headers.get("x-forwarded-for"), peer)
 
 
-def _rate_limited(ip: str) -> bool:
-    """Sliding-window por IP, en memoria y por instancia (best-effort)."""
+def _rate_limited(ip: str, *, bucket: str = "cheap", limit: int | None = None) -> bool:
+    """Sliding-window por IP y ``bucket``, en memoria y por instancia (best-effort).
+
+    Hay cubos separados porque no todas las peticiones cuestan lo mismo: un escaneo
+    ocupa CPU durante segundos y un informe es casi gratis.
+    """
+    allowed = RATE_LIMIT_PER_MIN if limit is None else limit
     now = time.monotonic()
-    hits = _rate_hits.setdefault(ip, deque())
+    hits = _rate_hits.setdefault(f"{bucket}:{ip}", deque())
     while hits and now - hits[0] > _RATE_WINDOW_S:
         hits.popleft()
-    if len(hits) >= RATE_LIMIT_PER_MIN:
+    if len(hits) >= allowed:
         return True
     hits.append(now)
     if len(_rate_hits) > 10_000:  # poda defensiva: evita crecimiento ilimitado
@@ -203,9 +215,19 @@ def _wants_json(request: Request) -> bool:
 
 def _error_response(request: Request, status_code: int, message: str) -> Response:
     """JSON para los endpoints de API, texto plano para el resto."""
+    response: Response
     if _wants_json(request):
-        return JSONResponse({"error": message}, status_code=status_code)
-    return PlainTextResponse(message, status_code=status_code)
+        response = JSONResponse({"error": message}, status_code=status_code)
+    else:
+        response = PlainTextResponse(message, status_code=status_code)
+    if status_code == 429:  # semántica HTTP correcta: cuándo puede reintentar
+        response.headers["Retry-After"] = str(int(_RATE_WINDOW_S))
+    return response
+
+
+def _is_scan_post(request: Request) -> bool:
+    """POST que lanza un análisis (caro: CPU durante segundos)."""
+    return request.method == "POST" and request.url.path in _SCAN_PATHS
 
 
 def _is_guarded_post(request: Request) -> bool:
@@ -229,14 +251,36 @@ def _declared_length_exceeds(request: Request) -> bool:
 async def _dispatch(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
-    if _is_guarded_post(request):
-        if _declared_length_exceeds(request):
-            limit_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
-            return _error_response(request, 413, f"La subida excede el máximo ({limit_mb} MB).")
-        if _rate_limited(_client_ip(request)):
-            message = "Demasiadas peticiones. Espera un momento y reinténtalo."
-            return _error_response(request, 429, message)
-    return await call_next(request)
+    if not _is_guarded_post(request):
+        return await call_next(request)
+
+    if _declared_length_exceeds(request):
+        limit_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
+        return _error_response(request, 413, f"La subida excede el máximo ({limit_mb} MB).")
+
+    ip = _client_ip(request)
+    too_many = "Demasiadas peticiones. Espera un momento y reinténtalo."
+    if not _is_scan_post(request):
+        if _rate_limited(ip):
+            return _error_response(request, 429, too_many)
+        return await call_next(request)
+
+    # Escaneos: cuota propia más estrecha y un tope de simultáneos por IP.
+    if _rate_limited(ip, bucket="scan", limit=RATE_LIMIT_SCANS_PER_MIN):
+        return _error_response(request, 429, too_many)
+    if _scans_in_flight.get(ip, 0) >= MAX_SCANS_PER_IP:
+        return _error_response(
+            request, 429, "Ya tienes un análisis en curso. Espera a que termine."
+        )
+    _scans_in_flight[ip] = _scans_in_flight.get(ip, 0) + 1
+    try:
+        return await call_next(request)
+    finally:
+        remaining = _scans_in_flight.get(ip, 1) - 1
+        if remaining > 0:
+            _scans_in_flight[ip] = remaining
+        else:
+            _scans_in_flight.pop(ip, None)
 
 
 @app.middleware("http")
