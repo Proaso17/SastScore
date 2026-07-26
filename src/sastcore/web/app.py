@@ -8,6 +8,7 @@ escaneo real corre en un subproceso aislado (ver ``scanning.py``).
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import time
 import uuid
@@ -29,6 +30,7 @@ from sastcore.reporters.html import HTMLReporter
 from sastcore.reporters.json_ import JSONReporter
 from sastcore.reporters.markdown import MarkdownReporter
 from sastcore.reporters.sarif import SARIFReporter
+from sastcore.web.reports_store import build_store
 from sastcore.web.scanning import (
     MAX_FILES,
     MAX_UPLOAD_BYTES,
@@ -37,6 +39,8 @@ from sastcore.web.scanning import (
     prepare_and_scan,
     prepare_and_scan_from_github,
 )
+
+logger = logging.getLogger(__name__)
 
 _HERE = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(_HERE / "templates"))
@@ -67,9 +71,13 @@ _RATE_WINDOW_S = 60.0
 # El proxy de confianza añade la IP real del cliente por la DERECHA del
 # X-Forwarded-For; la parte izquierda la puede falsificar el cliente.
 TRUSTED_PROXY_HOPS = _int_env("SASTCORE_TRUSTED_PROXY_HOPS", 1)
+# Horas que vive un informe compartido antes de autoexpirar.
+REPORT_TTL_HOURS = _int_env("SASTCORE_REPORT_TTL_HOURS", 168)
 
 _scan_semaphore = asyncio.Semaphore(MAX_CONCURRENT_SCANS)
 _rate_hits: dict[str, deque[float]] = {}
+# Almacén de informes compartibles (opt-in): fichero en local, GCS en producción.
+report_store = build_store()
 
 _SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 _SCAN_PATHS = frozenset({"/scan", "/api/scan", "/api/scan-url"})
@@ -190,7 +198,7 @@ def _is_guarded_post(request: Request) -> bool:
     if request.method != "POST":
         return False
     path = request.url.path
-    return path in _SCAN_PATHS or path.startswith("/report/")
+    return path in _SCAN_PATHS or path.startswith("/report/") or path == "/api/share"
 
 
 def _declared_length_exceeds(request: Request) -> bool:
@@ -311,7 +319,7 @@ async def download_report(fmt: str, payload: ReportRequest) -> Response:
         return JSONResponse({"error": "formato de informe no soportado"}, status_code=400)
     reporter, media_type, filename = entry
     try:
-        findings = [Finding.model_validate(item) for item in payload.findings]
+        findings = _validated_findings(payload.findings)
     except ValidationError:
         return JSONResponse({"error": "datos de hallazgos inválidos"}, status_code=400)
     text = reporter.render(findings, files_scanned=payload.files_scanned)
@@ -319,6 +327,64 @@ async def download_report(fmt: str, payload: ReportRequest) -> Response:
         content=text,
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _validated_findings(raw: list[dict[str, Any]]) -> list[Finding]:
+    """Reconstruye los hallazgos, rechazando cualquier payload que no case con el modelo."""
+    return [Finding.model_validate(item) for item in raw]
+
+
+@app.post("/api/share")
+async def share_report(payload: ReportRequest) -> JSONResponse:
+    """Guarda el informe (opt-in) y devuelve el enlace efímero para compartirlo."""
+    try:
+        findings = _validated_findings(payload.findings)
+    except ValidationError:
+        return JSONResponse({"error": "datos de hallazgos inválidos"}, status_code=400)
+    stored = {
+        "files_scanned": payload.files_scanned,
+        "findings": [finding.model_dump(mode="json") for finding in findings],
+    }
+    try:
+        report_id = await asyncio.to_thread(report_store.save, stored)
+    except Exception:
+        logger.exception("no se pudo guardar el informe compartido")
+        return JSONResponse({"error": "no se pudo crear el enlace"}, status_code=503)
+    return JSONResponse({"id": report_id, "url": f"/r/{report_id}", "ttl_hours": REPORT_TTL_HOURS})
+
+
+@app.get("/r/{report_id}")
+async def view_shared_report(request: Request, report_id: str) -> Response:
+    """Muestra un informe compartido; 404 si no existe o ya caducó."""
+    try:
+        stored = await asyncio.to_thread(report_store.load, report_id)
+    except Exception:
+        logger.exception("no se pudo leer el informe compartido")
+        stored = None
+    if stored is None:
+        return templates.TemplateResponse(
+            request,
+            "expired.html",
+            {"version": __version__, "asset_ver": ASSET_VER},
+            status_code=404,
+        )
+    findings = list(stored.get("findings", []))
+    counts: dict[str, int] = dict.fromkeys(_SEVERITY_ORDER, 0)
+    for finding in findings:
+        counts[finding["severity"]] = counts.get(finding["severity"], 0) + 1
+    return templates.TemplateResponse(
+        request,
+        "results.html",
+        {
+            "version": __version__,
+            "asset_ver": ASSET_VER,
+            "findings": findings,
+            "files_scanned": int(stored.get("files_scanned", 0)),
+            "counts": counts,
+            "severity_order": _SEVERITY_ORDER,
+            "shared": True,
+        },
     )
 
 

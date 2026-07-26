@@ -15,9 +15,20 @@ from fastapi.testclient import TestClient
 import sastcore.web.app as app_mod
 import sastcore.web.scanning as scanning
 from sastcore.web.app import app
+from sastcore.web.reports_store import FilesystemReportStore
 from sastcore.web.scanning import ScanReport
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit() -> None:
+    """Cada test parte con el rate-limit a cero.
+
+    Todos los tests comparten la IP del TestClient, así que sin esto los últimos
+    del fichero recibirían 429 al agotarse la cuota acumulada.
+    """
+    app_mod._rate_hits.clear()
 
 
 def _zip(files: dict[str, str]) -> bytes:
@@ -230,6 +241,69 @@ def test_scan_url_rejects_non_github() -> None:
     response = client.post("/api/scan-url", json={"url": "https://evil.example.com/a/b"})
     assert response.status_code == 400
     assert "error" in response.json()
+
+
+# ── Informes compartibles ───────────────────────────────────────────────────
+_FINDING = {
+    "rule_id": "py.dangerous.eval",
+    "message": "Uso de eval",
+    "severity": "HIGH",
+    "confidence": "HIGH",
+    "location": {
+        "path": "a.py",
+        "start_line": 1,
+        "end_line": 1,
+        "start_col": 0,
+        "end_col": 7,
+    },
+    "snippet": "eval(x)",
+    "engine": "pattern",
+}
+
+
+def _use_tmp_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(app_mod, "report_store", FilesystemReportStore(tmp_path, 3600))
+
+
+def test_share_and_view_report(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _use_tmp_store(monkeypatch, tmp_path)
+    created = client.post("/api/share", json={"files_scanned": 1, "findings": [_FINDING]})
+    assert created.status_code == 200
+    body = created.json()
+    assert body["url"] == f"/r/{body['id']}"
+
+    viewed = client.get(body["url"])
+    assert viewed.status_code == 200
+    assert "py.dangerous.eval" in viewed.text
+    assert "Informe compartido" in viewed.text
+
+
+def test_shared_report_expires(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Un informe con TTL agotado deja de servirse (y responde 404)."""
+    monkeypatch.setattr(app_mod, "report_store", FilesystemReportStore(tmp_path, -1))
+    created = client.post("/api/share", json={"files_scanned": 1, "findings": [_FINDING]})
+    report_id = created.json()["id"]
+    expired = client.get(f"/r/{report_id}")
+    assert expired.status_code == 404
+    assert "ya no está disponible" in expired.text
+
+
+def test_unknown_report_id_returns_404(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _use_tmp_store(monkeypatch, tmp_path)
+    assert client.get("/r/noexisteeste").status_code == 404
+
+
+def test_report_id_traversal_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Un id con caracteres fuera de la lista blanca no toca el sistema de ficheros."""
+    store = FilesystemReportStore(tmp_path, 3600)
+    assert store.load("../../etc/passwd") is None
+    assert store.load("bad id!") is None
+
+
+def test_share_rejects_invalid_findings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _use_tmp_store(monkeypatch, tmp_path)
+    response = client.post("/api/share", json={"files_scanned": 0, "findings": [{"nope": 1}]})
+    assert response.status_code == 400
 
 
 def test_rate_limiter_trips(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from sastcore import __version__
@@ -41,9 +42,21 @@ def test_scan_empty_dir_exits_ok(runner: CliRunner, tmp_path: Path) -> None:
     assert result.exit_code == ExitCode.OK
 
 
-def test_scan_default_path_exits_ok(runner: CliRunner) -> None:
-    result = runner.invoke(app, ["scan", "--no-cache"])
+def test_scan_default_path_scans_cwd(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sin ruta explícita se escanea el directorio actual.
+
+    Se hace ``chdir`` a un directorio pequeño en vez de escanear el repo entero:
+    así se comprueba justo el comportamiento del valor por defecto y el test no
+    depende del tamaño del repositorio (parsear cientos de ficheros en el mismo
+    proceso agrava el problema de memoria de tree-sitter, ver ADR-0005).
+    """
+    (tmp_path / "vulnerable.py").write_text("import os\nos.system(cmd)\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["scan", "--no-cache", "--no-config"])
     assert result.exit_code == ExitCode.OK
+    assert "py.dangerous.os-system" in result.output
 
 
 def test_rules_list_stub(runner: CliRunner) -> None:

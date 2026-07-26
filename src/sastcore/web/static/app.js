@@ -216,8 +216,54 @@
       b.addEventListener("click", () => downloadReport(fmt, b, status));
       bar.appendChild(b);
     });
+    const share = el("button", "dl-btn share-btn", "Compartir enlace");
+    share.type = "button";
+    share.addEventListener("click", () => shareReport(share, status));
+    bar.appendChild(share);
     bar.appendChild(status);
     return bar;
+  }
+
+  async function shareReport(btn, status) {
+    status.textContent = "";
+    btn.disabled = true;
+    try {
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files_scanned: filesScanned, findings }),
+      });
+      const data = await res.json();
+      if (!res.ok) { status.textContent = data.error || "No se pudo crear el enlace."; return; }
+      const link = location.origin + data.url;
+      const box = $("#share-box") || el("div", "share-box");
+      box.id = "share-box";
+      box.textContent = "";
+      const field = el("input", "share-url");
+      field.type = "text"; field.readOnly = true; field.value = link;
+      field.setAttribute("aria-label", "Enlace del informe compartido");
+      field.addEventListener("focus", () => field.select());
+      const copy = el("button", "btn btn-ghost", "Copiar");
+      copy.type = "button";
+      copy.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(link);
+          copy.textContent = "¡Copiado!";
+        } catch (_e) {
+          field.select();
+          copy.textContent = "Copia manual";
+        }
+        setTimeout(() => { copy.textContent = "Copiar"; }, 2000);
+      });
+      const note = el("small", "share-note",
+        `Enlace válido ${data.ttl_hours} h. Se borra automáticamente al caducar.`);
+      box.append(field, copy, note);
+      btn.parentElement.insertAdjacentElement("afterend", box);
+    } catch (_e) {
+      status.textContent = "No se pudo crear el enlace.";
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   async function downloadReport(fmt, btn, status) {

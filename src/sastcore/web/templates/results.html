@@ -23,6 +23,10 @@
       <span class="meta">{{ findings|length }} hallazgo(s) · {{ files_scanned }} fichero(s)</span>
     </div>
 
+    {% if shared %}
+    <div class="shared-note">Informe compartido · de solo lectura. Caduca automáticamente.</div>
+    {% endif %}
+
     {% if not findings %}
       <div class="empty">
         <h3>No se han detectado vulnerabilidades</h3>

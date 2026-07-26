@@ -66,6 +66,28 @@ Otras variables de entorno que puedes ajustar (con `--set-env-vars`):
 `SASTCORE_MAX_UPLOAD_BYTES` (máx. **32 MiB** en Cloud Run), `SASTCORE_MAX_UNCOMPRESSED_BYTES`,
 `SASTCORE_MAX_FILES`, `SASTCORE_SCAN_TIMEOUT_S`, `SASTCORE_RATE_LIMIT_PER_MIN`.
 
+## Enlaces compartibles (opcional)
+
+El botón «Compartir enlace» guarda el informe y devuelve una URL efímera. Sin configurar
+nada funciona escribiendo en el disco local de la instancia — válido para probar, pero en
+Cloud Run **cada instancia tiene su propio disco efímero**, así que un enlace creado en una
+instancia puede no resolverse en otra. Para que funcione de verdad en producción, usa un
+bucket de Cloud Storage:
+
+```bash
+gcloud storage buckets create gs://TU-BUCKET-informes --location europe-southwest1
+gcloud run services update sastcore --region europe-southwest1 \
+    --set-env-vars SASTCORE_REPORTS_BUCKET=TU-BUCKET-informes
+```
+
+La cuenta de servicio del servicio necesita permiso de lectura/escritura en el bucket
+(rol `roles/storage.objectAdmin` sobre ese bucket). El paquete `google-cloud-storage` debe
+estar instalado en la imagen (añádelo a `pyproject.toml` si vas a usar GCS).
+
+Ajusta la caducidad con `SASTCORE_REPORT_TTL_HOURS` (por defecto **168 h** = 7 días).
+Recomendado además: una **regla de ciclo de vida** en el bucket que borre los objetos
+pasados N días, como red de seguridad.
+
 ## Endurecido de seguridad (ya incluido)
 
 - Cabeceras: **CSP** estricta (`script-src 'self'`), `X-Content-Type-Options`, `X-Frame-Options`,
