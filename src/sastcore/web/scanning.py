@@ -24,7 +24,7 @@ import tempfile
 import time
 import zipfile
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -64,6 +64,10 @@ _GITHUB_URL = re.compile(r"^https://github\.com/([^/\s]+)/([^/\s#?]+)")
 _GH_OWNER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
 _GH_REPO = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
 _GH_ALLOWED_HOSTS = frozenset({"github.com", "api.github.com", "codeload.github.com"})
+
+
+# Notifica el avance del análisis: (ficheros analizados, total).
+ProgressCallback = Callable[[int, int], None]
 
 
 class UploadError(ValueError):
@@ -182,7 +186,7 @@ def _scan_batch(root: Path, targets: Sequence[str], timeout_s: float) -> dict[st
     return payload
 
 
-def scan_directory(root: Path) -> ScanReport:
+def scan_directory(root: Path, on_progress: ProgressCallback | None = None) -> ScanReport:
     """Escanea ``root`` en **lotes**, cada uno en un subproceso aislado.
 
     El binding de tree-sitter se corrompe tras parsear unas decenas de ficheros en el
@@ -190,18 +194,29 @@ def scan_directory(root: Path) -> ScanReport:
     real: se trocea el trabajo y cada lote arranca con un intérprete limpio. Si un lote
     muere sin dar informe se parte en dos y se reintenta, de modo que un solo fichero
     problemático no arruina el análisis completo.
+
+    ``on_progress`` se invoca tras cada lote con ``(ficheros_hechos, total)``; sirve para
+    ir informando al usuario en repositorios grandes, donde el análisis tarda.
     """
     targets = _discover_targets(root)
     if not targets:
         return ScanReport(files_scanned=0, findings=[])
+    total = len(targets)
+    if on_progress is not None:
+        on_progress(0, total)
 
     deadline = time.monotonic() + SCAN_TIMEOUT_S
     findings: list[dict[str, Any]] = []
     files_scanned = 0
+    done = 0
     queue = deque(targets)
     split: list[list[str]] = []  # mitades pendientes de un lote que murió
     # Se empieza con lotes grandes (un proceso arranca en ~1,5 s, así que cuantos
     # menos procesos, mejor) y se reduce el tamaño solo si alguno muere.
+    # Lotes grandes a propósito: medido sobre un repo real, trocear más fino hace que
+    # algún lote muera, y la recuperación va encogiendo el lote hasta 1 fichero. Eso
+    # multiplicó por 6 el tiempo y perdió el 64 % de los hallazgos (los ficheros que
+    # tampoco pasan sueltos se descartan). Menos avances, pero resultados correctos.
     size = SCAN_BATCH_FILES
 
     while queue or split:
@@ -228,6 +243,9 @@ def scan_directory(root: Path) -> ScanReport:
 
         files_scanned += int(payload.get("files_scanned", 0))
         findings.extend(payload.get("findings", []))
+        done += len(batch)
+        if on_progress is not None:
+            on_progress(min(done, total), total)
 
     if files_scanned == 0:
         # Había ficheros pero no se pudo analizar ninguno: es un fallo, no un
@@ -236,7 +254,9 @@ def scan_directory(root: Path) -> ScanReport:
     return ScanReport(files_scanned=files_scanned, findings=findings)
 
 
-def prepare_and_scan(uploads: list[tuple[str, bytes]]) -> ScanReport:
+def prepare_and_scan(
+    uploads: list[tuple[str, bytes]], on_progress: ProgressCallback | None = None
+) -> ScanReport:
     """Prepara un espacio de trabajo temporal desde la subida y lo escanea."""
     if not uploads:
         raise UploadError("no se subió ningún fichero")
@@ -251,7 +271,7 @@ def prepare_and_scan(uploads: list[tuple[str, bytes]]) -> ScanReport:
                 extract_zip(data, dest)
             else:
                 _write_plain_file(dest, filename, data)
-        return scan_directory(dest)
+        return scan_directory(dest, on_progress)
 
 
 def parse_github_url(url: str) -> tuple[str, str]:
@@ -328,11 +348,13 @@ def extract_tarball(data: bytes, dest: Path) -> None:
         raise UploadError("el archivo descargado no es un tar.gz válido") from exc
 
 
-def prepare_and_scan_from_github(url: str) -> ScanReport:
+def prepare_and_scan_from_github(
+    url: str, on_progress: ProgressCallback | None = None
+) -> ScanReport:
     """Descarga un repo público de GitHub por URL y lo escanea."""
     owner, repo = parse_github_url(url)
     data = download_github_tarball(owner, repo)
     with tempfile.TemporaryDirectory(prefix="sastcore_gh_") as tmp:
         dest = Path(tmp).resolve()
         extract_tarball(data, dest)
-        return scan_directory(dest)
+        return scan_directory(dest, on_progress)

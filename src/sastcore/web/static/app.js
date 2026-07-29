@@ -97,19 +97,58 @@
     view.classList.remove("hidden");
   }
 
+  const progressEl = $("#progress");
+
+  function setProgress(done, total) {
+    if (!progressEl) return;
+    if (!total) { progressEl.textContent = ""; return; }
+    const pct = Math.min(100, Math.round((done / total) * 100));
+    progressEl.textContent = `${done} de ${total} ficheros · ${pct}%`;
+  }
+
+  function showResults(data) {
+    findings = data.findings || [];
+    filesScanned = data.files_scanned || 0;
+    filter.sev = "ALL"; filter.q = "";
+    renderResults();
+    show(resultsView);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /* Lee la respuesta NDJSON del servidor: una línea JSON por evento
+     ({progress} varias veces y, al final, {result} o {error}). */
   async function performScan(url, opts) {
     alertEl.classList.add("hidden");
+    setProgress(0, 0);
     show(loadingView);
     try {
       const res = await fetch(url, opts);
-      const data = await res.json();
-      if (!res.ok) { show(uploadView); showAlert(data.error || "No se pudo analizar."); return; }
-      findings = data.findings || [];
-      filesScanned = data.files_scanned || 0;
-      filter.sev = "ALL"; filter.q = "";
-      renderResults();
-      show(resultsView);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        show(uploadView); showAlert(data.error || "No se pudo analizar.");
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let done = false;
+      while (!done) {
+        const chunk = await reader.read();
+        done = chunk.done;
+        buffer += decoder.decode(chunk.value || new Uint8Array(), { stream: !done });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();               // la última puede estar incompleta
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let ev;
+          try { ev = JSON.parse(line); } catch (_e) { continue; }
+          if (ev.type === "progress") setProgress(ev.done, ev.total);
+          else if (ev.type === "result") { showResults(ev); return; }
+          else if (ev.type === "error") { show(uploadView); showAlert(ev.error || "No se pudo analizar."); return; }
+        }
+      }
+      show(uploadView);
+      showAlert("El análisis se interrumpió antes de terminar. Inténtalo de nuevo.");
     } catch (_err) {
       show(uploadView);
       showAlert("No se pudo contactar con el servidor. Asegúrate de que está arrancado (ejecuta 'sastcore serve') y reintenta.");
@@ -121,7 +160,7 @@
     if (!files.length) return;
     const fd = new FormData();
     for (const f of files) fd.append("files", f, f.name);
-    performScan("/api/scan", { method: "POST", body: fd });
+    performScan("/api/scan-stream", { method: "POST", body: fd });
   });
 
   // ── Analizar un repo público de GitHub ──────────────────────────────────
@@ -130,7 +169,7 @@
   function scanRepo() {
     const url = (repoUrl.value || "").trim();
     if (!url) return;
-    performScan("/api/scan-url", {
+    performScan("/api/scan-url-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),

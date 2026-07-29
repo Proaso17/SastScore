@@ -8,18 +8,19 @@ escaneo real corre en un subproceso aislado (ver ``scanning.py``).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
 import time
 import uuid
 from collections import deque
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Request, UploadFile
-from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, ValidationError
@@ -35,6 +36,7 @@ from sastcore.web.reports_store import build_store
 from sastcore.web.scanning import (
     MAX_FILES,
     MAX_UPLOAD_BYTES,
+    ProgressCallback,
     ScanReport,
     UploadError,
     prepare_and_scan,
@@ -88,7 +90,9 @@ _scans_in_flight: dict[str, int] = {}
 report_store = build_store()
 
 _SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
-_SCAN_PATHS = frozenset({"/scan", "/api/scan", "/api/scan-url"})
+_SCAN_PATHS = frozenset(
+    {"/scan", "/api/scan", "/api/scan-url", "/api/scan-stream", "/api/scan-url-stream"}
+)
 # Los rule_id son de la forma "py.taint.sql-injection": lista blanca estricta, que
 # además evita inyectar saltos de línea u otro ruido en el log al registrarlos.
 _RULE_ID_RE = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
@@ -396,6 +400,79 @@ async def download_report(fmt: str, payload: ReportRequest) -> Response:
 def _validated_findings(raw: list[dict[str, Any]]) -> list[Finding]:
     """Reconstruye los hallazgos, rechazando cualquier payload que no case con el modelo."""
     return [Finding.model_validate(item) for item in raw]
+
+
+def _progress_stream(
+    run: Callable[[ProgressCallback], ScanReport],
+) -> StreamingResponse:
+    """Ejecuta un análisis emitiendo su avance como NDJSON, línea a línea.
+
+    El escaneo corre en un hilo (es bloqueante) y va empujando su progreso a una cola
+    que consume el generador. Todo ocurre **dentro de la petición**: Cloud Run solo
+    garantiza CPU mientras se atiende una, así que un trabajo en segundo plano se
+    quedaría parado (ver deploy/README).
+    """
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+    def on_progress(done: int, total: int) -> None:
+        loop.call_soon_threadsafe(
+            queue.put_nowait, {"type": "progress", "done": done, "total": total}
+        )
+
+    async def worker() -> None:
+        try:
+            async with _scan_semaphore:
+                report = await asyncio.to_thread(run, on_progress)
+            await queue.put(
+                {
+                    "type": "result",
+                    "files_scanned": report.files_scanned,
+                    "findings": report.findings,
+                }
+            )
+        except UploadError as exc:
+            await queue.put({"type": "error", "error": str(exc)})
+        except Exception:
+            logger.exception("fallo inesperado durante el análisis")
+            await queue.put({"type": "error", "error": "el análisis falló"})
+        finally:
+            await queue.put(None)
+
+    async def emit() -> AsyncIterator[str]:
+        task = asyncio.create_task(worker())
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield json.dumps(item, ensure_ascii=False) + "\n"
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        emit(),
+        media_type="application/x-ndjson",
+        # Sin buffering intermedio: el progreso debe llegar mientras se genera.
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/scan-stream")
+async def api_scan_stream(files: Annotated[list[UploadFile], File()]) -> Response:
+    """Igual que /api/scan pero informando del avance (repos grandes tardan)."""
+    try:
+        uploads = await _collect(files)
+    except UploadError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return _progress_stream(lambda progress: prepare_and_scan(uploads, progress))
+
+
+@app.post("/api/scan-url-stream")
+async def api_scan_url_stream(payload: ScanUrlRequest) -> Response:
+    """Igual que /api/scan-url pero informando del avance."""
+    return _progress_stream(lambda progress: prepare_and_scan_from_github(payload.url, progress))
 
 
 @app.post("/api/feedback")

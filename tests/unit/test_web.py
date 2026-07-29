@@ -8,6 +8,7 @@ import subprocess
 import tarfile
 import zipfile
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -363,6 +364,66 @@ def test_scan_slot_is_released_after_request(monkeypatch: pytest.MonkeyPatch) ->
     assert client.post("/api/scan", files=payload).status_code == 200
 
 
+def _ndjson(response: httpx.Response) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = [
+        json.loads(line) for line in response.text.splitlines() if line.strip()
+    ]
+    return events
+
+
+def test_scan_stream_emits_progress_then_result() -> None:
+    data = _zip({f"m{i}.py": "import os\nos.system(cmd)\n" for i in range(3)})
+    response = client.post(
+        "/api/scan-stream", files={"files": ("repo.zip", data, "application/zip")}
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    events = _ndjson(response)
+    assert [e["type"] for e in events][-1] == "result"
+    progress = [e for e in events if e["type"] == "progress"]
+    assert progress, "debe emitir al menos un evento de progreso"
+    assert progress[0]["total"] == 3
+    final = events[-1]
+    assert final["files_scanned"] == 3
+    ids = [f["rule_id"] for f in final["findings"]]
+    assert "py.dangerous.os-system" in ids
+
+
+def test_scan_stream_reports_errors_as_events(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(uploads: object, on_progress: object = None) -> ScanReport:
+        raise scanning.UploadError("repositorio demasiado grande")
+
+    monkeypatch.setattr(app_mod, "prepare_and_scan", boom)
+    response = client.post(
+        "/api/scan-stream", files={"files": ("a.py", b"x = 1\n", "text/x-python")}
+    )
+    assert response.status_code == 200  # el error viaja dentro del stream
+    events = _ndjson(response)
+    assert events[-1]["type"] == "error"
+    assert "demasiado grande" in str(events[-1]["error"])
+
+
+def test_scan_url_stream_emits_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    tar = _make_tar({"repo-main/app.py": b"import os\nos.system(cmd)\n"})
+    monkeypatch.setattr(scanning, "download_github_tarball", lambda owner, repo: tar)
+    response = client.post("/api/scan-url-stream", json={"url": "https://github.com/o/r"})
+    assert response.status_code == 200
+    final = _ndjson(response)[-1]
+    assert final["type"] == "result"
+    ids = [f["rule_id"] for f in final["findings"]]
+    assert "py.dangerous.os-system" in ids
+
+
+def test_scan_progress_callback_is_invoked(tmp_path: Path) -> None:
+    """El motor debe informar del avance: (0, total) al empezar y (total, total) al final."""
+    (tmp_path / "a.py").write_text("import os\nos.system(x)\n", encoding="utf-8")
+    (tmp_path / "b.py").write_text("y = 1\n", encoding="utf-8")
+    seen: list[tuple[int, int]] = []
+    scanning.scan_directory(tmp_path, lambda done, total: seen.append((done, total)))
+    assert seen[0] == (0, 2)
+    assert seen[-1] == (2, 2)
+
+
 def test_feedback_accepts_rule_id() -> None:
     response = client.post("/api/feedback", json={"rule_id": "py.taint.sql-injection"})
     assert response.status_code == 200
@@ -589,7 +650,11 @@ def test_logs_go_to_stderr() -> None:
         logging_module.configure_logging()
         handler = root.handlers[0]
         assert isinstance(handler, RichHandler)
-        assert handler.console.file is sys.stderr
+        # Lo que importa: la consola escribe en stderr y NUNCA en stdout, que se
+        # reserva para el informe JSON que parsea el proceso padre. No se compara
+        # con sys.stderr por identidad porque pytest lo sustituye al capturar.
+        assert handler.console.stderr is True
+        assert handler.console.file is not sys.stdout
     finally:
         root.handlers[:] = saved_handlers
         logging_module._configured = saved_configured
