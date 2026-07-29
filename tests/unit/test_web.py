@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 import sastcore.web.app as app_mod
 import sastcore.web.scanning as scanning
-from sastcore.web.app import app
+from sastcore.web.app import app, templates
 from sastcore.web.reports_store import FilesystemReportStore
 from sastcore.web.scanning import ScanReport
 
@@ -422,6 +422,36 @@ def test_scan_progress_callback_is_invoked(tmp_path: Path) -> None:
     scanning.scan_directory(tmp_path, lambda done, total: seen.append((done, total)))
     assert seen[0] == (0, 2)
     assert seen[-1] == (2, 2)
+
+
+def test_robots_txt() -> None:
+    response = client.get("/robots.txt")
+    assert response.status_code == 200
+    body = response.text
+    assert "User-agent: *" in body
+    assert "Disallow: /r/" in body  # los informes compartidos no se indexan
+
+
+def test_pages_have_favicon_and_social_tags() -> None:
+    body = client.get("/").text
+    assert 'rel="icon"' in body
+    assert 'property="og:title"' in body
+    assert 'name="twitter:card"' in body
+    assert 'rel="icon"' in client.get("/legal").text
+
+
+def test_canonical_only_when_public_url_configured() -> None:
+    """Sin dominio configurado no inventamos una URL canónica."""
+    assert templates.env.globals["public_url"] == ""
+    assert 'rel="canonical"' not in client.get("/").text
+    templates.env.globals["public_url"] = "https://example.test"
+    try:
+        body = client.get("/").text
+        assert '<link rel="canonical" href="https://example.test/">' in body
+        assert 'content="https://example.test/"' in body  # og:url
+        assert "Sitemap: https://example.test/sitemap.xml" not in client.get("/robots.txt").text
+    finally:
+        templates.env.globals["public_url"] = ""
 
 
 def test_feedback_accepts_rule_id() -> None:

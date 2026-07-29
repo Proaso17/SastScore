@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>sastcore · análisis de seguridad de tu código</title>
   <meta name="description" content="Sube tu repositorio y detecta vulnerabilidades: inyección, XSS, deserialización, criptografía débil y secretos.">
+  <link rel="icon" href="{{ favicon }}">
+  {% if public_url %}<link rel="canonical" href="{{ public_url }}/">{% endif %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="sastcore">
+  <meta property="og:title" content="sastcore · encuentra vulnerabilidades en tu código">
+  <meta property="og:description" content="Analiza tu repositorio (JavaScript, TypeScript y Python) y descubre cómo solucionar cada vulnerabilidad. Tu código no se ejecuta ni se almacena.">
+  {% if public_url %}<meta property="og:url" content="{{ public_url }}/">{% endif %}
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="sastcore · encuentra vulnerabilidades en tu código">
+  <meta name="twitter:description" content="Analiza tu repositorio y descubre cómo solucionar cada vulnerabilidad. Sin almacenar tu código.">
   <link rel="stylesheet" href="/static/style.css?v={{ asset_ver }}">
 </head>
 <body>

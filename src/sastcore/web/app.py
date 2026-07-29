@@ -48,6 +48,14 @@ logger = logging.getLogger(__name__)
 _HERE = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(_HERE / "templates"))
 
+# Icono de la pestaña: SVG embebido (la CSP permite data:), sin fichero extra ni petición.
+FAVICON = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'"
+    " fill='none' stroke='%234f46e5' stroke-width='2' stroke-linecap='round'"
+    " stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E"
+    "%3Cpath d='M9 12l2 2 4-4'/%3E%3C/svg%3E"
+)
+
 
 def _int_env(name: str, default: int) -> int:
     try:
@@ -79,6 +87,9 @@ _RATE_WINDOW_S = 60.0
 # El proxy de confianza añade la IP real del cliente por la DERECHA del
 # X-Forwarded-For; la parte izquierda la puede falsificar el cliente.
 TRUSTED_PROXY_HOPS = _int_env("SASTCORE_TRUSTED_PROXY_HOPS", 1)
+# URL pública del servicio (p. ej. https://sastcore.dev). Se usa para las etiquetas
+# canónicas y de redes sociales; vacío = se omiten (no inventamos un dominio).
+PUBLIC_URL = os.environ.get("SASTCORE_PUBLIC_URL", "").rstrip("/")
 # Horas que vive un informe compartido antes de autoexpirar.
 REPORT_TTL_HOURS = _int_env("SASTCORE_REPORT_TTL_HOURS", 168)
 
@@ -161,6 +172,10 @@ app = FastAPI(
     openapi_url=None,
 )
 app.mount("/static", StaticFiles(directory=str(_HERE / "static")), name="static")
+
+# Disponibles en todas las plantillas sin repetirlos en cada contexto.
+templates.env.globals["public_url"] = PUBLIC_URL
+templates.env.globals["favicon"] = FAVICON
 
 
 def _pick_client_ip(forwarded: str | None, peer: str | None) -> str:
@@ -541,6 +556,15 @@ async def view_shared_report(request: Request, report_id: str) -> Response:
             "shared": True,
         },
     )
+
+
+@app.get("/robots.txt")
+async def robots() -> PlainTextResponse:
+    """Permite indexar las páginas públicas, nunca los informes compartidos."""
+    lines = ["User-agent: *", "Allow: /$", "Allow: /legal", "Disallow: /r/", "Disallow: /api/"]
+    if PUBLIC_URL:
+        lines.append(f"Sitemap: {PUBLIC_URL}/sitemap.xml")
+    return PlainTextResponse("\n".join(lines) + "\n")
 
 
 @app.get("/health")

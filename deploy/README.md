@@ -138,6 +138,15 @@ gcloud beta run domain-mappings create --service sastcore \
 ```
 Sigue las instrucciones para añadir los registros DNS; el certificado TLS es automático.
 
+Cuando lo tengas, **declara la URL pública** para que se emitan las etiquetas canónicas,
+las de redes sociales y el `Sitemap` de `robots.txt` (sin esto se omiten, para no
+inventar un dominio):
+
+```bash
+gcloud run services update sastcore --region europe-southwest1 \
+    --set-env-vars SASTCORE_PUBLIC_URL=https://app.tudominio.com
+```
+
 ## Bajar o eliminar el servicio
 
 ```bash
@@ -177,8 +186,30 @@ política de Cloud Armor (regla `throttle` por IP + reglas OWASP preconfiguradas
 dominio, que da WAF y rate-limit básicos. Requiere igualmente cerrar el acceso directo a
 la URL de Cloud Run para que no se pueda esquivar.
 
+## Cola de trabajos en segundo plano: por qué no la usamos
+
+Puede parecer natural responder al instante y analizar «en segundo plano», pero en
+Cloud Run **eso no funciona sin cambiar la facturación**:
+
+- Por defecto, Cloud Run **solo asigna CPU mientras se atiende una petición**. Una tarea
+  lanzada tras responder se queda **congelada**.
+- Para que corra hay que desplegar con `--no-cpu-throttling` (CPU siempre asignada), que
+  cambia el modelo a **facturación por instancia**: pagas todo el ciclo de vida de la
+  instancia, no solo el tiempo de petición. Adiós a la economía de «escala a cero».
+- Hacerlo bien de verdad (Cloud Tasks + almacenar la subida en GCS + endpoint de worker
+  autenticado) es bastante infraestructura para el volumen actual.
+
+**Lo que hacemos en su lugar:** el análisis ocurre **dentro de la petición** (CPU
+garantizada) y el servidor **emite el progreso en streaming** (NDJSON) para que la
+página muestre «N de M ficheros · X %» en vez de un spinner mudo. Endpoints
+`/api/scan-stream` y `/api/scan-url-stream`.
+
+> Nota de rendimiento: los lotes son **grandes a propósito** (`SASTCORE_SCAN_BATCH_FILES`,
+> 200). Trocear más fino da más avances, pero medido sobre un repositorio real multiplicó
+> por 6 el tiempo y perdió el 64 % de los hallazgos: cuando un lote muere, la recuperación
+> lo va partiendo hasta 1 fichero y los que tampoco pasan sueltos se descartan.
+
 ## Siguientes pasos (opcionales)
 
 - **CI/CD:** conectar el repo para desplegar en cada push (Cloud Build trigger).
-- **Cola de trabajos** para repos muy grandes (procesar en segundo plano).
 - **Rate-limit global** (Redis/Memorystore) si el límite por instancia se queda corto.
