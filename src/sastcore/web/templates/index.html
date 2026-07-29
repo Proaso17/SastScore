@@ -65,6 +65,22 @@
         </div>
         <small class="url-hint">Solo repositorios públicos de GitHub.</small>
       </div>
+
+      <div class="card ci-cta">
+        <div class="ci-head">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+          <b>Analiza en cada commit, no solo aquí</b>
+        </div>
+        <p>sastcore es también una herramienta de línea de comandos: intégrala en tu CI y
+          bloquea los <i>pull requests</i> que introduzcan vulnerabilidades.</p>
+        <pre class="ci-code">pip install sastcore
+sastcore scan . --fail-on HIGH</pre>
+        <div class="ci-links">
+          <a href="https://github.com/Proaso17/SastScore" target="_blank" rel="noopener noreferrer">Ver en GitHub</a>
+          <a href="https://github.com/Proaso17/SastScore/blob/main/docs/ci-integration.md" target="_blank" rel="noopener noreferrer">GitHub Action y pre-commit</a>
+          <a href="https://github.com/Proaso17/SastScore/blob/main/docs/writing-rules.md" target="_blank" rel="noopener noreferrer">Escribir tus reglas</a>
+        </div>
+      </div>
     </section>
 
     <!-- ── Cargando ───────────────────────────────────────────── -->
@@ -84,6 +100,8 @@
     <div class="wrap">
       <span class="foot-links">
         <a href="/legal">Privacidad y términos</a>
+        <a href="https://github.com/Proaso17/SastScore" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/Proaso17/SastScore/issues" target="_blank" rel="noopener noreferrer">Reportar un fallo</a>
         <a href="mailto:migonagu@gmail.com">Contacto</a>
       </span>
     </div>

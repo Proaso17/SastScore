@@ -58,8 +58,9 @@ dev = [
 sastcore = "sastcore.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/sastcore/sastcore"
-Repository = "https://github.com/sastcore/sastcore"
+Homepage = "https://github.com/Proaso17/SastScore"
+Repository = "https://github.com/Proaso17/SastScore"
+Issues = "https://github.com/Proaso17/SastScore/issues"
 
 [tool.hatch.version]
 path = "src/sastcore/__init__.py"

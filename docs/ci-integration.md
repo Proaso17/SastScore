@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: sastcore
-        uses: OWNER/sastcore@v1          # o ./ si la acción está en el mismo repo
+        uses: Proaso17/SastScore@v1      # o ./ si la acción está en el mismo repo
         with:
           path: "."
           output: "sastcore.sarif"
@@ -60,7 +60,7 @@ sastcore se puede usar como hook de [pre-commit](https://pre-commit.com):
 ```yaml
 # .pre-commit-config.yaml del proyecto consumidor
 repos:
-  - repo: https://github.com/OWNER/sastcore
+  - repo: https://github.com/Proaso17/SastScore
     rev: v0.0.0
     hooks:
       - id: sastcore

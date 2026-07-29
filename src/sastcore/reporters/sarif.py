@@ -13,7 +13,7 @@ from sastcore import __version__
 from sastcore.findings.model import DataFlowStep, Finding, Location, Severity
 
 _SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
-_INFO_URI = "https://github.com/sastcore/sastcore"
+_INFO_URI = "https://github.com/Proaso17/SastScore"
 _FINGERPRINT_KEY = "sastcore/v1"
 
 _LEVEL: dict[Severity, str] = {

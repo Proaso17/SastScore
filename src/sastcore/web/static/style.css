@@ -237,6 +237,16 @@ main { padding: 44px 0 60px; }
 .dl-btn:disabled { opacity: .55; cursor: default; }
 .dl-status { color: #e5484d; font-size: 12.5px; }
 
+/* ── CTA: usar sastcore en tu CI ────────────────────────────────────────── */
+.ci-cta { padding: 20px 22px; margin-top: 22px; }
+.ci-head { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.ci-head svg { color: var(--accent); flex: none; }
+.ci-cta p { color: var(--muted); font-size: 13.5px; line-height: 1.55; margin-bottom: 12px; }
+.ci-code { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 11px 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; overflow-x: auto; color: var(--text); }
+.ci-links { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 13px; font-size: 13px; }
+.ci-links a { color: var(--accent); text-decoration: none; }
+.ci-links a:hover { text-decoration: underline; }
+
 /* ── Pie del hallazgo: etiquetas + reporte de falso positivo ────────────── */
 .f-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
 .f-foot .tags { margin: 0; }

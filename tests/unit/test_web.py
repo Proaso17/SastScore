@@ -156,6 +156,21 @@ def test_footer_has_contact_and_legal_link() -> None:
     assert "migonagu@gmail.com" in body
 
 
+def test_pages_link_to_the_real_repository() -> None:
+    """Los enlaces al repo deben apuntar al de verdad, no a un placeholder."""
+    for path in ("/", "/legal"):
+        body = client.get(path).text
+        assert "github.com/Proaso17/SastScore" in body, path
+        assert "OWNER/sastcore" not in body
+        assert "sastcore/sastcore" not in body
+
+
+def test_home_has_ci_call_to_action() -> None:
+    body = client.get("/").text
+    assert "pip install sastcore" in body
+    assert "ci-integration.md" in body
+
+
 def test_request_id_header() -> None:
     generated = client.get("/health")
     assert generated.headers.get("x-request-id")
